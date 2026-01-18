@@ -71,7 +71,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
     setEditingId(apt.id);
     setValue('date', apt.date);
     setValue('treatment', apt.treatment);
-    setValue('price', apt.price);
+    setValue('price', apt.price || 0);
     // Client info is already set because selectedClient is active
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -316,7 +316,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
                      <tr key={item.id} className={`hover:bg-slate-50 transition-colors ${editingId === item.id ? 'bg-indigo-50/60' : ''}`}>
                        <td className="px-6 py-4 font-medium whitespace-nowrap">{format(new Date(item.date), 'dd/MM/yyyy')}</td>
                        <td className="px-6 py-4">{item.treatment}</td>
-                       <td className="px-6 py-4 text-right font-semibold">€ {item.price.toFixed(2)}</td>
+                       <td className="px-6 py-4 text-right font-semibold">€ {(item.price || 0).toFixed(2)}</td>
                        <td className="px-6 py-4">
                          <div className="flex justify-center gap-2">
                            <button 

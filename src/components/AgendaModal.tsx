@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { X, Save, Clock, Scissors, Euro, UserPlus, ArrowLeft } from 'lucide-react';
+import { X, Save, Clock, Scissors, /* Euro, */ UserPlus, ArrowLeft } from 'lucide-react';
 import { type Client, type Appointment } from '../types';
 import ClientList from './ClientList';
 import { useClients } from '../hooks/useClients';
@@ -16,7 +16,7 @@ interface AgendaModalProps {
 
 interface ExternalFormData {
   treatment: string;
-  price: number;
+  price?: number;
   start_time: string;
 }
 
@@ -47,7 +47,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
         if(appointmentToEdit.clients) setSelectedClient(appointmentToEdit.clients);
         
         setValue('treatment', appointmentToEdit.treatment);
-        setValue('price', appointmentToEdit.price);
+        setValue('price', appointmentToEdit.price || 0); // Handle null price
         setValue('start_time', appointmentToEdit.start_time.slice(0, 5)); // HH:mm
       } else {
         // Create mode
@@ -69,6 +69,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
     setStep('details');
   };
 
+  /*
   const treatmentValue = watch('treatment');
   const handleTreatmentBlur = async () => {
      if (treatmentValue) {
@@ -76,6 +77,13 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
        if (price !== null) setValue('price', price);
      }
   };
+  */
+
+  // Remove handleTreatmentBlur call from onBlur if we don't want to auto-fill hidden price
+  // But user said "remove the request of price", not "don't save it if known".
+  // Actually, if input is gone, setValue 'price' works but user can't see/edit it.
+  // Best to just not set it for Agenda.
+  // const handleTreatmentBlurMock = () => {}; // No-op
 
   const onNewClientSubmit = async (data: NewClientFormData) => {
     setSubmitting(true);
@@ -104,7 +112,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
         date: (appointmentToEdit ? appointmentToEdit.date : initialDate?.toISOString().split('T')[0]) || new Date().toISOString().split('T')[0],
         start_time: data.start_time,
         treatment: data.treatment,
-        price: Number(data.price),
+        price: data.price ? Number(data.price) : null, // Send null if no price provided (Agenda default)
       };
 
       if (appointmentToEdit) {
@@ -245,26 +253,15 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                      <Scissors className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                      <input 
                        {...register('treatment', { required: true })}
-                       onBlur={handleTreatmentBlur}
+                       // onBlur={handleTreatmentBlur} // Disabled auto-price fetch for Agenda
                        placeholder="Es. Colore e Piega"
                        className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg"
                      />
                    </div>
                 </div>
 
-                <div>
-                   <label className="block text-sm font-medium text-slate-700 mb-1">Prezzo Previsto (€)</label>
-                   <div className="relative">
-                     <Euro className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                     <input 
-                       type="number" 
-                       step="0.01"
-                       {...register('price', { value: 0 })}
-                       className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg"
-                     />
-                   </div>
-                </div>
-
+                 {/* Price field removed as requested */}
+                
                 <div className="pt-4 flex justify-end gap-3">
                   <button 
                     type="button"

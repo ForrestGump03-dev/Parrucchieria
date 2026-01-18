@@ -13,7 +13,7 @@ export interface Appointment {
   date: string; // ISO date string (YYYY-MM-DD)
   start_time: string; // HH:mm
   treatment: string;
-  price: number;
+  price: number | null;
   // Join fields
   clients?: Client;
 }
