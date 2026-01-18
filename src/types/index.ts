@@ -10,7 +10,8 @@ export interface Appointment {
   id: string;
   created_at: string;
   client_id: string;
-  date: string; // ISO date string
+  date: string; // ISO date string (YYYY-MM-DD)
+  start_time: string; // HH:mm
   treatment: string;
   price: number;
   // Join fields
@@ -18,4 +19,5 @@ export interface Appointment {
 }
 
 export type NewClient = Omit<Client, 'id' | 'created_at'>;
+// NewAppointment helpers
 export type NewAppointment = Omit<Appointment, 'id' | 'created_at' | 'clients'>;

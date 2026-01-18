@@ -1,17 +1,15 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import MainLayout from './layout/MainLayout';
-import Dashboard from './pages/Dashboard';
+import Agenda from './pages/Agenda';
 import Clients from './pages/Clients';
-import History from './pages/History';
 
 function App() {
   return (
     <Router>
       <Routes>
         <Route path="/" element={<MainLayout />}>
-          <Route index element={<Dashboard />} />
+          <Route index element={<Agenda />} />
           <Route path="clients" element={<Clients />} />
-          <Route path="history" element={<History />} />
         </Route>
       </Routes>
     </Router>

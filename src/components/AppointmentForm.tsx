@@ -121,13 +121,19 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
           date: data.date,
           treatment: data.treatment,
           price: Number(data.price),
+          // Keep existing start_time or update? For simplicity, we don't change time here yet unless we add field.
         });
         alert('Appuntamento aggiornato!');
         setEditingId(null);
       } else {
+        // Default time for "Cashier" mode: Current Time
+        const now = new Date();
+        const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        
         await addAppointment({
           client_id: clientId!,
           date: data.date,
+          start_time: timeString,
           treatment: data.treatment,
           price: Number(data.price),
         });
@@ -159,12 +165,12 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
             {editingId ? (
               <>
                 <Pencil className="text-amber-500" size={20} />
-                Modifica Appuntamento
+                Modifica Trattamento
               </>
             ) : (
               <>
                 <FileText className="text-indigo-600" size={20} />
-                Nuovo Appuntamento
+                Nuovo Trattamento
               </>
             )}
           </h2>
@@ -278,8 +284,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
               editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700'
             } disabled:opacity-70`}
           >
-            {editingId ? <Pencil size={18} /> : <Save size={18} />}
-            {submitting ? 'Salvataggio...' : (editingId ? 'Aggiorna Modifiche' : 'Registra Appuntamento')}
+            <Save size={18} />
+            {submitting ? 'Salvataggio...' : (editingId ? 'Aggiorna Trattamento' : 'Registra Trattamento')}
           </button>
         </div>
       </form>

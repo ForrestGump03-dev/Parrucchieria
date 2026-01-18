@@ -22,12 +22,26 @@ export function useAppointments() {
   }
 
   async function getClientHistory(clientId: string) {
+    const today = new Date().toISOString().split('T')[0];
+    
     const { data, error } = await supabase
       .from('appointments')
       .select('*')
       .eq('client_id', clientId)
+      .lte('date', today) // Mostra solo storia passata o odierna, non futura
       .order('date', { ascending: false });
 
+    if (error) throw error;
+    return data as Appointment[];
+  }
+
+  async function getAppointmentsForRange(start: Date, end: Date) {
+     const { data, error } = await supabase
+      .from('appointments')
+      .select('*, clients(*)') // Join with clients to show name in calendar
+      .gte('date', start.toISOString())
+      .lte('date', end.toISOString());
+      
     if (error) throw error;
     return data as Appointment[];
   }
@@ -66,5 +80,5 @@ export function useAppointments() {
     return data?.price || null;
   }
 
-  return { addAppointment, getClientHistory, getLastPriceForTreatment, deleteAppointment, updateAppointment, loading };
+  return { addAppointment, getClientHistory, getAppointmentsForRange, getLastPriceForTreatment, deleteAppointment, updateAppointment, loading };
 }

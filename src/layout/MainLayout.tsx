@@ -1,14 +1,13 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Calendar, Users, History, Scissors } from 'lucide-react';
+import { Calendar, Users, Scissors } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function MainLayout() {
   const location = useLocation();
 
   const navItems = [
-    { path: '/', label: 'Appuntamenti', icon: Calendar },
-    { path: '/clients', label: 'Clienti', icon: Users },
-    { path: '/history', label: 'Storico', icon: History },
+    { path: '/', label: 'Agenda', icon: Calendar },
+    { path: '/clients', label: 'Clienti & Cassa', icon: Users },
   ];
 
   return (
