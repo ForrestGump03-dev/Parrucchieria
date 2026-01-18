@@ -69,6 +69,7 @@ export function useAppointments() {
       .from('appointments')
       .select('price')
       .eq('treatment', treatment)
+      .gt('price', 0) // Ignore 0/unpaid prices
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();

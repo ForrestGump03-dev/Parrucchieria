@@ -112,7 +112,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
         date: (appointmentToEdit ? appointmentToEdit.date : initialDate?.toISOString().split('T')[0]) || new Date().toISOString().split('T')[0],
         start_time: data.start_time,
         treatment: data.treatment,
-        price: data.price ? Number(data.price) : null, // Send null if no price provided (Agenda default)
+        price: data.price ? Number(data.price) : 0, // Default to 0 instead of null to match DB schema
       };
 
       if (appointmentToEdit) {
