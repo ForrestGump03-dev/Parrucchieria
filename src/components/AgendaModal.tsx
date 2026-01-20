@@ -5,6 +5,7 @@ import { type Client, type Appointment } from '../types';
 import ClientList from './ClientList';
 import { useClients } from '../hooks/useClients';
 import { useAppointments } from '../hooks/useAppointments';
+import { TREATMENTS } from '../constants/treatments';
 
 interface AgendaModalProps {
   isOpen: boolean;
@@ -28,12 +29,12 @@ interface NewClientFormData {
 
 export default function AgendaModal({ isOpen, onClose, initialDate, appointmentToEdit, onSaved }: AgendaModalProps) {
   const { clients, addClient, fetchClients } = useClients(); // For the search list
-  const { addAppointment, updateAppointment, getLastPriceForTreatment } = useAppointments();
+  const { addAppointment, updateAppointment } = useAppointments();
   
   const [step, setStep] = useState<'client' | 'details' | 'new-client'>('client');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   
-  const { register, handleSubmit, setValue, watch, reset } = useForm<ExternalFormData>();
+  const { register, handleSubmit, setValue, reset } = useForm<ExternalFormData>();
   const { register: registerNewClient, handleSubmit: handleSubmitNewClient, reset: resetNewClient } = useForm<NewClientFormData>();
   
   const [submitting, setSubmitting] = useState(false);
@@ -112,7 +113,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
         date: (appointmentToEdit ? appointmentToEdit.date : initialDate?.toISOString().split('T')[0]) || new Date().toISOString().split('T')[0],
         start_time: data.start_time,
         treatment: data.treatment,
-        price: data.price ? Number(data.price) : 0, // Default to 0 instead of null to match DB schema
+        price: data.price ? Number(data.price) : null, // Set to null for agenda items (not yet paid)
       };
 
       if (appointmentToEdit) {
@@ -251,12 +252,15 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                    <label className="block text-sm font-medium text-slate-700 mb-1">Trattamento</label>
                    <div className="relative">
                      <Scissors className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                     <input 
+                     <select 
                        {...register('treatment', { required: true })}
-                       // onBlur={handleTreatmentBlur} // Disabled auto-price fetch for Agenda
-                       placeholder="Es. Colore e Piega"
-                       className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg"
-                     />
+                       className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg appearance-none bg-white"
+                     >
+                        <option value="">Seleziona...</option>
+                        {TREATMENTS.map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                     </select>
                    </div>
                 </div>
 

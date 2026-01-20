@@ -1,32 +1,36 @@
-# Gestionale Parrucchieria v0.1.0
+# Gestionale Parrucchieria v0.2.0
 
 Programma gestionale per parrucchieri sviluppato con React, Tailwind CSS e Supabase.
 
 ## Funzionalità Principali
 
 ### 📅 Agenda & Appuntamenti (Dashboard)
-- **Vista Giornaliera**: Visualizzazione di default impostata su "Giorno" con slot temporali di 30 minuti per una gestione precisa.
+- **Vista Giornaliera**: Visualizzazione di default impostata su "Giorno".
+- **Visualizzazione Cluster**: Gli appuntamenti sovrapposti o molto vicini vengono raggruppati automaticamente in un unico blocco ("Cluster") per evitare confusione visiva.
+  - I cluster raggruppano appuntamenti entro un arco di 45 minuti.
+  - Cliccando sul cluster si apre un modale per selezionare l'appuntamento specifico.
+- **Micro-Schede**: Le schede degli appuntamenti sono compatte, mostrano solo l'ora di inizio e il nome, nascondendo l'orario di fine per pulizia.
+- **Logica Prenotazione**: Gli appuntamenti presi dall'agenda vengono salvati come "Prenotazioni" (Prezzo: Da definire/Null), distinguendoli dai trattamenti già pagati.
 - **Drag & Drop**: Spostamento rapido degli appuntamenti.
 - **Menu Contestuale**: Tasto destro sull'appuntamento per **Modificare** o **Eliminare**.
-- **Flusso Eliminazione Sicura**: 
-  - Eliminazione Appuntamento -> Apre un **Toast Non Bloccante** (5 secondi).
-  - Il Toast permette di eliminare anche l'anagrafica cliente se necessario, altrimenti scompare automaticamente.
+- **Flusso Eliminazione Sicura**: Eliminazione con toast di conferma per eventuale cancellazione cliente correlato.
 
 ### 👥 Gestione Clienti
 - **Lista Clienti**: Ricerca veloce in tempo reale per nome/telefono.
-- **Aggiornamento Istantaneo**: La lista clienti si aggiorna immediatamente dopo la creazione o l'eliminazione di un'anagrafica.
-- **Storico Clienti**: Nella sezione "Cassa/Nuovo Appuntamento", viene mostrato solo lo **storico passato** (appuntamenti precedenti a oggi), ordinato dal più recente.
+- **Storico Intelligente**: Lo storico clienti mostra **SOLO** i trattamenti effettivamente eseguiti e registrati in cassa (quelli con un prezzo definito). Le prenotazioni future o non ancora pagate non inquinano lo storico.
+- **Aggiornamento Istantaneo**: Liste reattive alle modifiche.
 
 ### 💰 Cassa & Trattamenti
-- **Form Intelligente**: Autocompilazione dati e recupero dell'ultimo prezzo applicato per quel trattamento specifico.
-- **Feedback Immediato**: Avvisi visivi per operazioni critiche (eliminazioni irreversibili).
+- **Registrazione Incassi**: Modulo dedicato per registrare il trattamento effettuato e il prezzo finale.
+- **Autocompilazione**: Recupero automatico dell'ultimo prezzo pagato dal cliente per lo stesso trattamento.
+- **Storico**: I trattamenti inseriti da qui finiscono direttamente nello storico del cliente.
 
 ---
 
-## Stato del Progetto e Dipendenze (18/01/2026)
+## Stato del Progetto e Dipendenze (20/01/2026)
 
 ### Versione
-**Versione Attuale**: `0.1.0` (Alpha)
+**Versione Attuale**: `0.2.0` (Beta)
 
 ### Dipendenze Core
 | Pacchetto | Versione | Scopo |
@@ -44,29 +48,21 @@ Programma gestionale per parrucchieri sviluppato con React, Tailwind CSS e Supab
 | `lucide-react` | `^0.562.0` | Icone |
 | `react-big-calendar` | `^1.19.4` | Componente Calendario/Agenda |
 | `date-fns` | `^4.1.0` | Manipolazione date |
-| `clsx` / `tailwind-merge` | `^2.1.1` / `^3.4.0` | Gestione classi CSS dinamiche |
-
-### Form & Validazione
-| Pacchetto | Versione | Scopo |
-|-----------|----------|-------|
-| `react-hook-form` | `^7.71.1` | Gestione form |
-| `zod` | `^4.3.5` | Validazione schemi |
-| `@hookform/resolvers` | `^5.2.2` | Integrazione Zod/ReactHookForm |
 
 ---
 
-## Changelog Recente (18/01/2026)
-1.  **Agenda Refactoring**: 
-    - Impostata vista Giorno come default.
-    - Slot temporali portati a 30 minuti.
-    - Implementato menu contestuale (tasto destro).
-2.  **Safety Features**:
-    - Creato componente `ConfirmModal` per conferme critiche.
-    - Creato componente `DeleteClientToast`: notifica a tempo per eliminazione opzionale del cliente post-appuntamento.
-3.  **UX Improvements**:
-    - Fix visualizzazione storico (solo appuntamenti passati).
-    - Aggiornamento reattivo delle liste clienti dopo eliminazione senza refresh pagina.
-    - Correzione bug sintassi nei form.
+## Changelog Recente (20/01/2026)
+1.  **Agenda Cluster System**: 
+    - Risolto problema sovrapposizione visiva appuntamenti.
+    - Implementato sistema di raggruppamento (max 45min) per appuntamenti vicini.
+    - Introdotta logica di "Stacking" verticale per gruppi adiacenti.
+2.  **Logica Business**:
+    - Separazione netta tra **Prenotazione** (Agenda -> Prezzo Null) e **Vendita** (Cassa -> Prezzo definito).
+    - Filtro storico clienti: ora mostra solo le vendite confermate.
+3.  **UI/UX**:
+    - Restyling schede appuntamento (più compatte, rimosso orario fine).
+    - Migliorato modale selezione cluster.
+    - Rimozione campo Prezzo nel modale Agenda (inutile in fase di prenotazione).
 
 ---
 
@@ -77,7 +73,9 @@ Programma gestionale per parrucchieri sviluppato con React, Tailwind CSS e Supab
 - Account Supabase (Piano Free).
 
 ### 2. Configurazione Database (Supabase)
-Crea un nuovo progetto su Supabase e vai nella sezione **SQL Editor**. Incolla ed esegui il seguente script per creare le tabelle:
+Crea un nuovo progetto su Supabase e vai nella sezione **SQL Editor**. 
+
+**IMPORTANTE**: Per la versione 0.2.0 è necessario che il campo `price` accetti valori NULL.
 
 ```sql
 -- Tabella Clienti
@@ -95,10 +93,14 @@ create table public.appointments (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   client_id uuid references public.clients(id) not null,
   date date not null,
+  start_time text, -- Opzionale, formato HH:mm
   treatment text not null,
-  price numeric not null,
+  price numeric, -- NOTA: Deve essere 'numeric' semplice (senza 'not null') per accettare prenotazioni
   notes text
 );
+
+-- Se hai già la tabella creata con 'not null', esegui questo comando di migrazione:
+-- alter table public.appointments alter column price drop not null;
 
 -- Policy (Opzionale: disabilita RLS per test rapidi oppure abilita accesso pubblico)
 alter table public.clients enable row level security;

@@ -22,13 +22,15 @@ export function useAppointments() {
   }
 
   async function getClientHistory(clientId: string) {
-    const today = new Date().toISOString().split('T')[0];
     
     const { data, error } = await supabase
       .from('appointments')
       .select('*')
       .eq('client_id', clientId)
-      .lte('date', today) // Mostra solo storia passata o odierna, non futura
+      // Modifica fondamentale: mostra solo se hanno un prezzo (quindi pagati/registrati in cassa)
+      // OPPURE se la data è passata. Ma la richiesta specifica "solo se registro il trattamento in cassa".
+      // Assumiamo che "registrato in cassa" significhi price != null (o > 0 nel vecchio schema, ma ora stiamo usando null per quelli in agenda)
+      .not('price', 'is', null) 
       .order('date', { ascending: false });
 
     if (error) throw error;

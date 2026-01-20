@@ -26,6 +26,11 @@ const localizer = dateFnsLocalizer({
   locales,
 });
 
+const formats = {
+  eventTimeRangeFormat: ({ start }: { start: Date }, culture: any, local: any) =>
+    local.format(start, 'HH:mm', culture),
+};
+
 const DnDCalendar = withDragAndDrop(Calendar);
 
 const parseDateTime = (dateStr: string, timeStr: string) => {
@@ -63,6 +68,9 @@ export default function Agenda() {
     clientName: string;
   }>({ isVisible: false, clientId: '', clientName: '' });
 
+  // Cluster Selection State
+  const [clusterData, setClusterData] = useState<{ isOpen: boolean; events: any[] }>({ isOpen: false, events: [] });
+
   const fetchEvents = useCallback(async () => {
     // Calcola il range in base alla vista
     const start = new Date(date);
@@ -74,7 +82,8 @@ export default function Agenda() {
       const data = await getAppointmentsForRange(start, end);
       const calendarEvents = (data || []).map((apt: Appointment) => {
         const start = parseDateTime(apt.date, apt.start_time || '00:00');
-        const end = addMinutes(start, 30); // Default 30 min duration for better visualization
+        // Default 30 min duration for better visualization
+        const end = addMinutes(start, 30);
         
         return {
           id: apt.id,
@@ -85,7 +94,61 @@ export default function Agenda() {
           resource: apt
         };
       });
-      setEvents(calendarEvents);
+      
+      // Group overlapping events to avoid ugly overlapping visual
+      const sortedEvents = calendarEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
+      const groupedEvents: any[] = [];
+      const MAX_CLUSTER_SPAN = 45 * 60 * 1000; // 45 minutes max grouping span
+      
+      for (const event of sortedEvents) {
+        const lastGroup = groupedEvents[groupedEvents.length - 1];
+        
+        // If overlap with last group (and same day) AND starts within reasonable time from group start
+        if (lastGroup && 
+            event.start < lastGroup.end && 
+            event.start.toDateString() === lastGroup.start.toDateString() &&
+            (event.start.getTime() - lastGroup.start.getTime() < MAX_CLUSTER_SPAN)
+        ) {
+           lastGroup.events.push(event);
+           // Extend group visual duration
+           if (event.end > lastGroup.end) lastGroup.end = event.end;
+        } else {
+           // Create new group (or single event wrapper)
+           groupedEvents.push({
+             ...event,
+             id: `group-${event.id}`,
+             isCluster: false, 
+             events: [event]
+           });
+        }
+      }
+      
+      // Finalize: Prevent overlapping clusters by clamping end time
+      for (let i = 0; i < groupedEvents.length - 1; i++) {
+        const current = groupedEvents[i];
+        const next = groupedEvents[i + 1];
+
+        // If current overlaps with next (and they are clusters or dense areas)
+        if (current.end > next.start && current.start < next.start) {
+           // Clamp current end to next start to force vertical stacking
+           current.end = next.start;
+        }
+      }
+
+      // Finalize structure: if > 1 event, it's a cluster
+      const processedEvents = groupedEvents.map(g => {
+        if (g.events.length > 1) {
+          return {
+            ...g,
+            title: `${g.events.length} Appuntamenti`,
+            isCluster: true,
+            resource: { isCluster: true, events: g.events }
+          };
+        }
+        return g.events[0]; // Return original single event
+      });
+
+      setEvents(processedEvents);
     } catch (e) {
       console.error(e);
     }
@@ -106,13 +169,45 @@ export default function Agenda() {
   };
 
   const handleSelectEvent = (event: any) => {
-    // Left click opens edit directly (or could confirm)
+    // If it's a cluster, open selection modal
+    if (event.resource?.isCluster) {
+      setClusterData({ isOpen: true, events: event.resource.events });
+      return;
+    }
+
+    // Standard left click opens edit directly
     setEditingAppointment(event.resource);
     setIsModalOpen(true);
   };
   
-  // Custom Event component to handle right click
+  // Custom Event component to handle display
   const EventComponent = ({ event }: any) => {
+    // Render Cluster
+    if (event.resource?.isCluster) {
+        return (
+            <div 
+              className="h-full w-full flex flex-col items-start p-0.5 overflow-hidden text-[10px]"
+              title="Clicca per espandere"
+            >
+               <div className="font-bold mb-0.5 w-full flex justify-between items-center whitespace-nowrap bg-white/10 px-0.5 rounded">
+                 <span>{format(event.start, 'HH:mm')}-{format(event.end, 'HH:mm')}</span>
+                 <span className="bg-white/20 px-1 rounded text-[9px]">{event.resource.events.length}</span>
+               </div>
+               
+               <div className="flex flex-col gap-px w-full opacity-95">
+                 {event.resource.events.slice(0, 3).map((sub: any) => (
+                   <div key={sub.id} className="truncate leading-none flex items-center gap-1">
+                     <span className="opacity-70 font-mono text-[9px]">{format(sub.start, 'HH:mm')}</span>
+                     <span>{sub.title}</span>
+                   </div>
+                 ))}
+                 {event.resource.events.length > 3 && <span className="text-[9px] italic leading-tight opacity-75">+{event.resource.events.length - 3} altri...</span>}
+               </div>
+            </div>
+        );
+    }
+
+    // Render Single Event
     return (
       <div 
         onContextMenu={(e) => {
@@ -124,7 +219,7 @@ export default function Agenda() {
             event 
           });
         }}
-        className="h-full w-full flex flex-col text-xs leading-tight overflow-hidden"
+        className="h-full w-full flex flex-col text-xs leading-tight overflow-hidden p-0.5"
         title={`${event.title} - ${event.desc}`}
       >
         <span className="font-bold truncate">{event.title}</span>
@@ -212,6 +307,7 @@ export default function Agenda() {
           style={{ height: '100%', minHeight: '600px' }}
           culture="it"
           view={view}
+          formats={formats} // Custom formats (hidden end time)
           date={date}
           onView={(view) => setView(view)}
           onNavigate={(date) => setDate(date)}
@@ -297,7 +393,41 @@ export default function Agenda() {
             });
         }}
         onClose={() => setDeleteToast(prev => ({ ...prev, isVisible: false }))}
-      />    </div>
+      />
+
+      {/* Cluster Selection Modal */}
+      {clusterData.isOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200">
+             <div className="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center">
+               <h3 className="font-semibold text-slate-800">Seleziona Appuntamento</h3>
+               <button onClick={() => setClusterData({ ...clusterData, isOpen: false })} className="text-slate-500 hover:text-red-500 hover:bg-slate-200 rounded-full p-1 transition-colors">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+               </button>
+             </div>
+             <div className="p-2 max-h-[60vh] overflow-y-auto">
+               {clusterData.events.map((evt) => (
+                 <button 
+                    key={evt.id}
+                    onClick={() => {
+                      setClusterData({ ...clusterData, isOpen: false });
+                      setEditingAppointment(evt.resource);
+                      setIsModalOpen(true);
+                    }}
+                    className="w-full text-left p-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 rounded-lg transition-colors group"
+                 >
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-bold text-slate-800 group-hover:text-indigo-700">{evt.title}</span>
+                      <span className="text-xs font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-500">{format(evt.start, 'HH:mm')}</span>
+                    </div>
+                    <div className="text-sm text-slate-500 truncate">{evt.desc}</div>
+                 </button>
+               ))}
+             </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

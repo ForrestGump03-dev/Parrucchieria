@@ -4,6 +4,8 @@ import { format } from 'date-fns';
 import { Calendar, Euro, FileText, Phone, User, Save, History as HistoryIcon, Pencil, Trash2, X } from 'lucide-react';
 import { type Client, type Appointment } from '../types';
 import { useAppointments } from '../hooks/useAppointments';
+import { TREATMENTS } from '../constants/treatments';
+import { supabase } from '../lib/supabase';
 
 interface AppointmentFormProps {
   selectedClient?: Client;
@@ -20,7 +22,7 @@ interface FormData {
 }
 
 export default function AppointmentForm({ selectedClient, onClientUpdated }: AppointmentFormProps) {
-  const { register, handleSubmit, setValue, watch, reset } = useForm<FormData>({
+  const { register, handleSubmit, setValue, reset } = useForm<FormData>({
     defaultValues: {
       date: format(new Date(), 'yyyy-MM-dd'),
     }
@@ -31,11 +33,24 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
-  const treatmentValue = watch('treatment');
 
+  const handleTreatmentChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    // Update the form value manually since we are intercepting onChange
+    setValue('treatment', val);
+    
+    // Only auto-fill price if we are adding new, or if user changed treatment
+    if (val && !editingId) {
+      const price = await getLastPriceForTreatment(val);
+      if (price !== null) {
+        setValue('price', price);
+      }
+    }
+  };
+
+  /* Restore useEffect for client selection reset */
   useEffect(() => {
     if (selectedClient) {
-      // If we are NOT editing an old appointment, reset form to client defaults
       if (!editingId) {
         setValue('first_name', selectedClient.first_name);
         setValue('last_name', selectedClient.last_name);
@@ -49,18 +64,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
       setHistory([]);
       cancelEdit();
     }
-  }, [selectedClient, setValue]); // editingId dependency removed to prevent loop, but careful logic needed
-
-  const handleTreatmentBlur = async () => {
-    // Only auto-fill price if we are adding new, or if user changed treatment and price is 0?
-    // Let's keep it simple: if adding new and treatment changes, fetch price.
-    if (treatmentValue && !editingId) {
-      const price = await getLastPriceForTreatment(treatmentValue);
-      if (price !== null) {
-        setValue('price', price);
-      }
-    }
-  };
+  }, [selectedClient, setValue]); 
 
   async function fetchHistory(clientId: string) {
     const data = await getClientHistory(clientId);
@@ -104,7 +108,6 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
       let clientId = selectedClient?.id;
 
       if (!clientId) {
-         const { supabase } = await import('../lib/supabase');
          const { data: newClient, error } = await supabase.from('clients').insert([{
              first_name: data.first_name,
              last_name: data.last_name,
@@ -243,12 +246,16 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Trattamento</label>
-              <input
+              <select
                 {...register('treatment', { required: true })}
-                onBlur={handleTreatmentBlur}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                placeholder="Es. Taglio, Piega..."
-              />
+                onChange={handleTreatmentChange}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+              >
+                 <option value="">Seleziona...</option>
+                 {TREATMENTS.map(t => (
+                   <option key={t} value={t}>{t}</option>
+                 ))}
+              </select>
             </div>
 
             <div>
