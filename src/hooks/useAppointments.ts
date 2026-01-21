@@ -1,16 +1,23 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { type Appointment, type NewAppointment } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 export function useAppointments() {
   const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
   
   async function addAppointment(appointment: NewAppointment) {
+    if (!user) throw new Error("Utente non autenticato");
+
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('appointments')
-        .insert([appointment])
+        .insert([{
+           ...appointment,
+           user_id: user.id
+        }])
         .select()
         .single();
 
@@ -83,5 +90,27 @@ export function useAppointments() {
     return data?.price || null;
   }
 
-  return { addAppointment, getClientHistory, getAppointmentsForRange, getLastPriceForTreatment, deleteAppointment, updateAppointment, loading };
+  async function getClientAppointmentsByTime(clientId: string, date: string, time: string) {
+    const { data, error } = await supabase
+      .from('appointments')
+      .select('*')
+      .eq('client_id', clientId)
+      .eq('date', date)
+      .eq('start_time', time)
+      .is('price', null); // Agenda only
+      
+    if (error) throw error;
+    return data as Appointment[];
+  }
+
+  return { 
+    addAppointment, 
+    getClientHistory, 
+    getAppointmentsForRange, 
+    getLastPriceForTreatment, 
+    deleteAppointment, 
+    updateAppointment, 
+    getClientAppointmentsByTime,
+    loading 
+  };
 }

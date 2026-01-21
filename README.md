@@ -1,8 +1,13 @@
-# Gestionale Parrucchieria v0.2.1
+# Gestionale Parrucchieria v1.0.1
 
 Programma gestionale per parrucchieri sviluppato con React, Tailwind CSS e Supabase.
 
 ## Funzionalità Principali
+
+### 🔐 Sicurezza & Multi-Utente (Novità v1.0.1)
+- **Login Protetto**: Accesso tramite Email e Password.
+- **Isolamento Dati**: Ogni Salone/Utente vede SOLO i propri clienti e appuntamenti (Database Multi-Tenant gestito via Supabase RLS).
+- **Sessione Sicura**: Gestione automatica della sessione utente.
 
 ### 📅 Agenda & Appuntamenti (Dashboard)
 - **Vista Giornaliera**: Visualizzazione di default impostata su "Giorno".
@@ -40,7 +45,7 @@ Programma gestionale per parrucchieri sviluppato con React, Tailwind CSS e Supab
 ## Stato del Progetto e Dipendenze (21/01/2026)
 
 ### Versione
-**Versione Attuale**: `0.2.1` (Beta)
+**Versione Attuale**: `1.0.1` (Release)
 
 ### Dipendenze Core
 | Pacchetto | Versione | Scopo |
@@ -61,18 +66,22 @@ Programma gestionale per parrucchieri sviluppato con React, Tailwind CSS e Supab
 
 ---
 
-## Changelog Recente (21/01/2026) - v0.2.1
+## Changelog Recente - v1.0.1 (Release Ufficiale)
 
-1.  **Multi-Service System**:
+1.  **Sicurezza Enterprise**:
+    - **Multi-Tenancy**: Architettura database isolata. Un singolo database supporta infiniti clienti in sicurezza totale.
+    - **Row Level Security (RLS)**: Le query al database sono filtrate automaticamente lato server. Nessun rischio di fuga dati tra saloni.
+    - **Autenticazione**: Pagina di Login nativa integrata.
+
+2.  **Multi-Service System**:
     - **Cassa**: Possibilità di aggiungere più trattamenti ("Carrello") prima di salvare.
     - **Agenda**: Possibilità di prenotare più servizi per un cliente in un unico slot.
-2.  **Analisi & Statistiche**:
-    - **Custom Range**: Aggiunto selettore date personalizzato nella pagina Report.
-    - **Fix "Oggi"**: Risolto bug che nascondeva gli incassi odierni a causa di problemi di fuso orario/UTC.
-3.  **UX Agenda**:
-    - **Filtro Completati**: L'agenda ora mostra solo gli appuntamenti *pianificati*. Una volta che un appuntamento viene pagato (tramite Cassa), guadagna un prezzo e viene nascosto dall'agenda futura, apparendo solo nello storico e nelle statistiche.
 
-## Changelog Precedente (20/01/2026) - v0.2.0
+3.  **Analisi & Statistiche**:
+    - **Custom Range**: Aggiunto selettore date personalizzato nella pagina Report.
+    - **Miglioramenti UI**: Fix su statistiche "Oggi" e formattazione percentuali di crescita.
+
+## Changelog Precedente (21/01/2026) - v0.2.1
 1.  **Agenda Cluster System**: 
     - Risolto problema sovrapposizione visiva appuntamenti.
     - Implementato sistema di raggruppamento (max 45min) per appuntamenti vicini.

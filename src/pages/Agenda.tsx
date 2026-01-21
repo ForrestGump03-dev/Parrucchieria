@@ -4,6 +4,7 @@ import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
 import { format, parse, startOfWeek, getDay, addMinutes } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Trash2, Edit } from 'lucide-react';
+import toast from 'react-hot-toast';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 
@@ -192,13 +193,24 @@ export default function Agenda() {
             <div 
               className="h-full w-full flex flex-col items-start p-0.5 overflow-hidden text-[10px]"
               title="Clicca per espandere"
+              onClick={(e) => {
+                  e.stopPropagation(); // Stop default click inside (important)
+                  // Manually trigger cluster selection
+                  setClusterData({ isOpen: true, events: event.resource.events });
+              }}
+              onContextMenu={(e) => {
+                  // Allow treating cluster context menu same as left click -> Open Selection
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setClusterData({ isOpen: true, events: event.resource.events });
+              }}
             >
-               <div className="font-bold mb-0.5 w-full flex justify-between items-center whitespace-nowrap bg-white/10 px-0.5 rounded">
+               <div className="font-bold mb-0.5 w-full flex justify-between items-center whitespace-nowrap bg-white/10 px-0.5 rounded pointer-events-none">
                  <span>{format(event.start, 'HH:mm')}-{format(event.end, 'HH:mm')}</span>
                  <span className="bg-white/20 px-1 rounded text-[9px]">{event.resource.events.length}</span>
                </div>
                
-               <div className="flex flex-col gap-px w-full opacity-95">
+               <div className="flex flex-col gap-px w-full opacity-95 pointer-events-none">
                  {event.resource.events.slice(0, 3).map((sub: any) => (
                    <div key={sub.id} className="truncate leading-none flex items-center gap-1">
                      <span className="opacity-70 font-mono text-[9px]">{format(sub.start, 'HH:mm')}</span>
@@ -223,11 +235,17 @@ export default function Agenda() {
             event 
           });
         }}
+        onClick={(e) => {
+             // Force Open on any click inside blue area
+             e.stopPropagation(); 
+             setEditingAppointment(event.resource);
+             setIsModalOpen(true);
+        }}
         className="h-full w-full flex flex-col text-xs leading-tight overflow-hidden p-0.5"
         title={`${event.title} - ${event.desc}`}
       >
-        <span className="font-bold truncate">{event.title}</span>
-        <span className="truncate opacity-90">{event.desc}</span>
+        <span className="font-bold truncate pointer-events-none">{event.title}</span>
+        <span className="truncate opacity-90 pointer-events-none">{event.desc}</span>
       </div>
     );
   };
@@ -260,7 +278,7 @@ export default function Agenda() {
           }
         } catch (e) {
           console.error(e);
-          alert('Errore eliminazione appuntamento');
+          toast.error('Errore eliminazione appuntamento');
         }
       }
     });
@@ -283,9 +301,10 @@ export default function Agenda() {
         start_time: timeStr
       });
       fetchEvents();
+      toast.success("Appuntamento spostato");
     } catch (error) {
       console.error("Errore spostamento appuntamento", error);
-      alert("Impossibile spostare l'appuntamento");
+      toast.error("Impossibile spostare l'appuntamento");
     }
   };
 
@@ -390,10 +409,11 @@ export default function Agenda() {
             .then(() => {
               fetchEvents(); // Refresh agenda
               setDeleteToast(prev => ({ ...prev, isVisible: false }));
+              toast.success("Cliente eliminato definitivamente");
             })
             .catch(err => {
               console.error(err);
-              alert("Errore durante l'eliminazione del cliente");
+              toast.error("Errore durante l'eliminazione del cliente");
             });
         }}
         onClose={() => setDeleteToast(prev => ({ ...prev, isVisible: false }))}

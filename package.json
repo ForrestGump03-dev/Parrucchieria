@@ -1,7 +1,7 @@
 {
   "name": "parrucchieria-manager",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -21,6 +21,7 @@
     "react-big-calendar": "^1.19.4",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.71.1",
+    "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.12.0",
     "tailwind-merge": "^3.4.0",
     "zod": "^4.3.5"

@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import { Calendar, FileText, Phone, User, History as HistoryIcon, Pencil, Trash2, X, Plus, ShoppingBag } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { type Client, type Appointment } from '../types';
+import { useClients } from '../hooks/useClients';
 import { useAppointments } from '../hooks/useAppointments';
 import { TREATMENTS } from '../constants/treatments';
 import { supabase } from '../lib/supabase';
@@ -10,6 +12,7 @@ import { supabase } from '../lib/supabase';
 interface AppointmentFormProps {
   selectedClient?: Client;
   onClientUpdated: () => void;
+  onSelectExistingClient?: (client: Client | undefined) => void;
 }
 
 interface FormData {
@@ -25,18 +28,51 @@ interface ServiceItem {
   price: number;
 }
 
-export default function AppointmentForm({ selectedClient, onClientUpdated }: AppointmentFormProps) {
-  const { register, handleSubmit, setValue, reset } = useForm<FormData>({
+export default function AppointmentForm({ selectedClient, onClientUpdated, onSelectExistingClient }: AppointmentFormProps) {
+  const { register, handleSubmit, setValue, reset, watch } = useForm<FormData>({
     defaultValues: {
       date: format(new Date(), 'yyyy-MM-dd'),
     }
   });
 
   const { addAppointment, getLastPriceForTreatment, getClientHistory, deleteAppointment, updateAppointment } = useAppointments();
+  const { getClientByPhone } = useClients();
   const [history, setHistory] = useState<Appointment[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
+  // Watch phone for duplicate check
+  const phoneValue = watch('phone');
+
+  // Debounce duplicate check
+  useEffect(() => {
+    // Only check if we are NOT editing an existing user (selectedClient is null)
+    // and we have a valid phone number length
+    if (!selectedClient && phoneValue && phoneValue.length > 5) {
+      const timer = setTimeout(async () => {
+        const existing = await getClientByPhone(phoneValue);
+        if (existing) {
+          toast((t) => (
+            <div className="flex flex-col gap-2">
+              <span className="font-semibold">Cliente trovato!</span>
+              <span className="text-sm">Il numero {phoneValue} appartiene a {existing.first_name} {existing.last_name}.</span>
+              <button 
+                onClick={() => {
+                   if(onSelectExistingClient) onSelectExistingClient(existing);
+                   toast.dismiss(t.id);
+                }}
+                className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700"
+              >
+                Carica Dati Cliente
+              </button>
+            </div>
+          ), { duration: 6000, icon: '🔍' });
+        }
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [phoneValue, selectedClient, getClientByPhone, onSelectExistingClient]);
+
   // Multi-service state
   const [selectedServices, setSelectedServices] = useState<ServiceItem[]>([]);
   const [currentTreatment, setCurrentTreatment] = useState('');
@@ -113,15 +149,16 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
       try {
         await deleteAppointment(id);
         if (selectedClient) fetchHistory(selectedClient.id);
+        toast.success("Trattamento eliminato");
       } catch (err) {
-        alert('Errore eliminazione');
+        toast.error('Errore eliminazione');
       }
     }
   };
 
   const onSubmit = async (data: FormData) => {
     if (selectedServices.length === 0) {
-      alert('Seleziona almeno un trattamento');
+      toast.error('Seleziona almeno un trattamento');
       return;
     }
     setSubmitting(true);
@@ -129,6 +166,22 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
       let clientId = selectedClient?.id;
 
       if (!clientId) {
+         // Double check duplicate before insert just in case
+         const existing = await getClientByPhone(data.phone);
+         if (existing) {
+             const confirmLoad = confirm(`Attenzione: Il numero ${data.phone} è già associato a ${existing.first_name} ${existing.last_name}. Vuoi usare questo cliente esistente invece di crearne uno nuovo (e doppio)?`);
+             if (confirmLoad) {
+                if(onSelectExistingClient) {
+                    onSelectExistingClient(existing);
+                    toast.success(`Dati di ${existing.first_name} caricati! Riprova il salvataggio.`);
+                    setSubmitting(false);
+                    return;
+                }
+             }
+             // If they say NO, we create a duplicate (maybe they really want to?)
+             // But usually you wouldn't want that.
+         }
+
          const { data: newClient, error } = await supabase.from('clients').insert([{
              first_name: data.first_name,
              last_name: data.last_name,
@@ -153,7 +206,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
           treatment: service.treatment,
           price: service.price,
         });
-        alert('Trattamento aggiornato!');
+        toast.success('Trattamento aggiornato!');
         setEditingId(null);
       } else {
         // Bulk Insert
@@ -167,7 +220,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
           })
         );
         await Promise.all(promises);
-        alert(`${selectedServices.length} trattamenti registrati!`);
+        toast.success(`${selectedServices.length} trattamenti registrati!`);
       }
 
       if (selectedClient || clientId) fetchHistory(selectedClient?.id || clientId!);
@@ -182,7 +235,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
       
     } catch (err) {
       console.error(err);
-      alert('Errore nel salvataggio');
+      toast.error('Errore nel salvataggio');
     } finally {
       setSubmitting(false);
     }
@@ -203,15 +256,29 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
             ) : (
               <>
                 <FileText className="text-indigo-600" size={20} />
-                Nuova Registrazione (Cassa)
+                {selectedClient ? `Nuova Registrazione: ${selectedClient.first_name}` : 'Nuova Registrazione (Cassa)'}
               </>
             )}
           </h2>
-          {editingId && (
-            <button type="button" onClick={cancelEdit} className="text-slate-400 hover:text-slate-600 flex items-center gap-1 text-sm">
-              <X size={16} /> Annulla Modifica
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {selectedClient && !editingId && (
+              <button 
+                type="button" 
+                onClick={() => {
+                  if(onSelectExistingClient) onSelectExistingClient(undefined as any); // Hack to clear selection
+                  // Better pass a dedicated clear prop but this works if parent handles undefined
+                }} 
+                className="text-slate-500 hover:text-indigo-600 flex items-center gap-1 text-sm bg-slate-100 px-3 py-1 rounded-full transition-colors"
+              >
+                <X size={14} /> Deseleziona Cliente
+              </button>
+            )}
+            {editingId && (
+                <button type="button" onClick={cancelEdit} className="text-slate-400 hover:text-slate-600 flex items-center gap-1 text-sm">
+                <X size={16} /> Annulla Modifica
+                </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Search, User, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { type Client } from '../types';
 import { useClients } from '../hooks/useClients';
 import ConfirmModal from './ConfirmModal';
@@ -44,8 +45,9 @@ export default function ClientList({ clients, onSelect, selectedClientId, loadin
           await deleteClient(id);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           if (onClientDeleted) onClientDeleted();
+          toast.success("Cliente eliminato con successo");
         } catch (err) {
-          alert('Errore eliminazione cliente');
+          toast.error('Errore eliminazione cliente');
         }
       }
     });

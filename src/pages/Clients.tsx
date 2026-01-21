@@ -8,7 +8,7 @@ export default function Clients() {
   const { clients, loading, fetchClients } = useClients();
   const [selectedClient, setSelectedClient] = useState<Client | undefined>(undefined);
 
-  const handleClientSelect = (client: Client) => {
+  const handleClientSelect = (client: Client | undefined) => {
     setSelectedClient(client);
   };
 
@@ -34,6 +34,7 @@ export default function Clients() {
         <AppointmentForm 
           selectedClient={selectedClient} 
           onClientUpdated={handleClientUpdated}
+          onSelectExistingClient={setSelectedClient}
         />
       </div>
     </div>

@@ -1,17 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { type Client } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 export function useClients() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
-  useEffect(() => {
-    fetchClients();
-  }, []);
-
-  async function fetchClients() {
+  const fetchClients = useCallback(async () => {
+    if (!user) return;
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -26,12 +25,21 @@ export function useClients() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
+
+  useEffect(() => {
+    fetchClients();
+  }, [fetchClients]);
 
   async function addClient(client: Omit<Client, 'id' | 'created_at'>) {
+    if (!user) throw new Error("Utente non autenticato");
+    
     const { data, error } = await supabase
       .from('clients')
-      .insert([client])
+      .insert([{
+        ...client,
+        user_id: user.id
+      }])
       .select()
       .single();
 
@@ -50,5 +58,19 @@ export function useClients() {
     setClients((prev) => prev.filter(c => c.id !== id));
   }
 
-  return { clients, loading, error, fetchClients, addClient, deleteClient };
+  async function getClientByPhone(phone: string) {
+     const { data, error } = await supabase
+       .from('clients')
+       .select('*')
+       .eq('phone', phone)
+       .maybeSingle();
+     
+     if (error) {
+       console.error("Error confirming phone", error);
+       return null;
+     }
+     return data;
+  }
+
+  return { clients, loading, error, fetchClients, addClient, deleteClient, getClientByPhone };
 }

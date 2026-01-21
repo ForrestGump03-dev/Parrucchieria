@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStats, type DateRange } from '../hooks/useStats';
 import { TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard, Award, UserCheck, Filter, ArrowRight } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, parse, startOfDay, endOfDay, isValid } from 'date-fns';
 import { it } from 'date-fns/locale';
 
@@ -58,7 +59,7 @@ export default function Reports() {
 
   const applyCustomRange = () => {
     if (!customDates.start || !customDates.end) {
-      alert("Seleziona entrambe le date.");
+      toast.error("Seleziona entrambe le date.");
       return;
     }
 
@@ -66,12 +67,12 @@ export default function Reports() {
     const end = endOfDay(parse(customDates.end, 'yyyy-MM-dd', new Date()));
 
     if (!isValid(start) || !isValid(end)) {
-      alert("Date non valide.");
+      toast.error("Date non valide.");
       return;
     }
 
     if (start > end) {
-      alert("La data di inizio deve essere precedente alla data di fine.");
+      toast.error("La data di inizio deve essere precedente alla data di fine.");
       return;
     }
 
