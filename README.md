@@ -1,4 +1,4 @@
-# Gestionale Parrucchieria v0.2.0
+# Gestionale Parrucchieria v0.2.1
 
 Programma gestionale per parrucchieri sviluppato con React, Tailwind CSS e Supabase.
 
@@ -11,6 +11,8 @@ Programma gestionale per parrucchieri sviluppato con React, Tailwind CSS e Supab
   - Cliccando sul cluster si apre un modale per selezionare l'appuntamento specifico.
 - **Micro-Schede**: Le schede degli appuntamenti sono compatte, mostrano solo l'ora di inizio e il nome, nascondendo l'orario di fine per pulizia.
 - **Logica Prenotazione**: Gli appuntamenti presi dall'agenda vengono salvati come "Prenotazioni" (Prezzo: Da definire/Null), distinguendoli dai trattamenti già pagati.
+- **Supporto Multi-Trattamento**: È possibile prenotare più servizi (es. Taglio + Colore) in un'unica sessione.
+- **Vista Focalizzata**: Gli appuntamenti già incassati/pagati vengono nascosti dall'agenda per mantenere la vista pulita.
 - **Drag & Drop**: Spostamento rapido degli appuntamenti.
 - **Menu Contestuale**: Tasto destro sull'appuntamento per **Modificare** o **Eliminare**.
 - **Flusso Eliminazione Sicura**: Eliminazione con toast di conferma per eventuale cancellazione cliente correlato.
@@ -21,16 +23,24 @@ Programma gestionale per parrucchieri sviluppato con React, Tailwind CSS e Supab
 - **Aggiornamento Istantaneo**: Liste reattive alle modifiche.
 
 ### 💰 Cassa & Trattamenti
-- **Registrazione Incassi**: Modulo dedicato per registrare il trattamento effettuato e il prezzo finale.
+- **Registrazione Incassi (Modalità Carrello)**: Possibilità di registrare molteplici trattamenti in una singola sessione per lo stesso cliente.
 - **Autocompilazione**: Recupero automatico dell'ultimo prezzo pagato dal cliente per lo stesso trattamento.
 - **Storico**: I trattamenti inseriti da qui finiscono direttamente nello storico del cliente.
 
+### 📊 Analisi & Report
+- **Analisi Finanziaria**: Dashboard completa con filtri temporali dinamici (Oggi, Settimana, Mese, Anno, Mese Scorso) e **Intervallo Personalizzato**.
+- **Metriche Avanzate**:
+  - **Penetrazione Servizi**: Visualizzazione grafica (%) di quanto spesso un servizio viene scelto rispetto al totale delle visite uniche.
+  - **Visite Uniche**: Conteggio intelligente che unifica trattamenti multipli dello stesso cliente nello stesso giorno.
+  - **Trend**: Confronto automatico della crescita rispetto al periodo precedente equivalente.
+- **Top Ranking**: Classifiche per Fatturato Servizi e Fedeltà Clienti.
+
 ---
 
-## Stato del Progetto e Dipendenze (20/01/2026)
+## Stato del Progetto e Dipendenze (21/01/2026)
 
 ### Versione
-**Versione Attuale**: `0.2.0` (Beta)
+**Versione Attuale**: `0.2.1` (Beta)
 
 ### Dipendenze Core
 | Pacchetto | Versione | Scopo |
@@ -51,7 +61,18 @@ Programma gestionale per parrucchieri sviluppato con React, Tailwind CSS e Supab
 
 ---
 
-## Changelog Recente (20/01/2026)
+## Changelog Recente (21/01/2026) - v0.2.1
+
+1.  **Multi-Service System**:
+    - **Cassa**: Possibilità di aggiungere più trattamenti ("Carrello") prima di salvare.
+    - **Agenda**: Possibilità di prenotare più servizi per un cliente in un unico slot.
+2.  **Analisi & Statistiche**:
+    - **Custom Range**: Aggiunto selettore date personalizzato nella pagina Report.
+    - **Fix "Oggi"**: Risolto bug che nascondeva gli incassi odierni a causa di problemi di fuso orario/UTC.
+3.  **UX Agenda**:
+    - **Filtro Completati**: L'agenda ora mostra solo gli appuntamenti *pianificati*. Una volta che un appuntamento viene pagato (tramite Cassa), guadagna un prezzo e viene nascosto dall'agenda futura, apparendo solo nello storico e nelle statistiche.
+
+## Changelog Precedente (20/01/2026) - v0.2.0
 1.  **Agenda Cluster System**: 
     - Risolto problema sovrapposizione visiva appuntamenti.
     - Implementato sistema di raggruppamento (max 45min) per appuntamenti vicini.
@@ -131,12 +152,12 @@ Apri il browser su `http://localhost:5173`.
 
 ## Stack Tecnologico
 - **Frontend**: React (Vite)
-- **Lingukaggio**: TypeScript
+- **Linguaggio**: TypeScript
 - **Stile**: Tailwind CSS
 - **Icone**: Lucide React
 - **Backend/DB**: Supabase (PostgreSQL)
 - **Routing**: React Router Dom
 
 ## Note per lo Sviluppo Futuro
-- Per trasformare in app desktop, è consigliato integrare **Electron** nel progetto (già predispostocome struttura React).
+- Per trasformare in app desktop, è consigliato integrare **Electron** nel progetto (già predisposto come struttura React).
 - Implementare autenticazione utente (Login parrucchiere) se necessario accedervi via internet.

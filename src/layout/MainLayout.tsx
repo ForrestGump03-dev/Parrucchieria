@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Calendar, Users, Scissors } from 'lucide-react';
+import { Calendar, Users, Scissors, BarChart3 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function MainLayout() {
@@ -8,6 +8,7 @@ export default function MainLayout() {
   const navItems = [
     { path: '/', label: 'Agenda', icon: Calendar },
     { path: '/clients', label: 'Clienti & Cassa', icon: Users },
+    { path: '/reports', label: 'Report & Analisi', icon: BarChart3 },
   ];
 
   return (

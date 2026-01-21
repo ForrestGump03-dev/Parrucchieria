@@ -80,7 +80,11 @@ export default function Agenda() {
 
     try {
       const data = await getAppointmentsForRange(start, end);
-      const calendarEvents = (data || []).map((apt: Appointment) => {
+      // Filter out completed/paid treatments (price is not null)
+      // Agenda should only show planned appointments
+      const calendarEvents = (data || [])
+        .filter(apt => apt.price === null)
+        .map((apt: Appointment) => {
         const start = parseDateTime(apt.date, apt.start_time || '00:00');
         // Default 30 min duration for better visualization
         const end = addMinutes(start, 30);

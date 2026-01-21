@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
-import { Calendar, Euro, FileText, Phone, User, Save, History as HistoryIcon, Pencil, Trash2, X } from 'lucide-react';
+import { Calendar, FileText, Phone, User, History as HistoryIcon, Pencil, Trash2, X, Plus, ShoppingBag } from 'lucide-react';
 import { type Client, type Appointment } from '../types';
 import { useAppointments } from '../hooks/useAppointments';
 import { TREATMENTS } from '../constants/treatments';
@@ -17,6 +17,10 @@ interface FormData {
   last_name: string;
   phone: string;
   date: string;
+  // removed single treatment/price
+}
+
+interface ServiceItem {
   treatment: string;
   price: number;
 }
@@ -33,19 +37,35 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
+  // Multi-service state
+  const [selectedServices, setSelectedServices] = useState<ServiceItem[]>([]);
+  const [currentTreatment, setCurrentTreatment] = useState('');
+  const [currentPrice, setCurrentPrice] = useState<string>('');
 
-  const handleTreatmentChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleTreatmentSelect = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
-    // Update the form value manually since we are intercepting onChange
-    setValue('treatment', val);
-    
-    // Only auto-fill price if we are adding new, or if user changed treatment
-    if (val && !editingId) {
+    setCurrentTreatment(val);
+    if (val) {
       const price = await getLastPriceForTreatment(val);
       if (price !== null) {
-        setValue('price', price);
+        setCurrentPrice(price.toString());
       }
+    } else {
+      setCurrentPrice('');
     }
+  };
+
+  const addService = () => {
+    if (!currentTreatment || !currentPrice) return;
+    setSelectedServices([...selectedServices, { treatment: currentTreatment, price: Number(currentPrice) }]);
+    setCurrentTreatment('');
+    setCurrentPrice('');
+  };
+
+  const removeService = (index: number) => {
+    const newServices = [...selectedServices];
+    newServices.splice(index, 1);
+    setSelectedServices(newServices);
   };
 
   /* Restore useEffect for client selection reset */
@@ -55,9 +75,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
         setValue('first_name', selectedClient.first_name);
         setValue('last_name', selectedClient.last_name);
         setValue('phone', selectedClient.phone);
-        setValue('treatment', '');
-        setValue('price', 0);
         setValue('date', format(new Date(), 'yyyy-MM-dd'));
+        setSelectedServices([]);
       }
       fetchHistory(selectedClient.id);
     } else {
@@ -74,17 +93,15 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
   const handleEdit = (apt: Appointment) => {
     setEditingId(apt.id);
     setValue('date', apt.date);
-    setValue('treatment', apt.treatment);
-    setValue('price', apt.price || 0);
-    // Client info is already set because selectedClient is active
+    // For editing, we load just that one service as a single item list
+    setSelectedServices([{ treatment: apt.treatment, price: apt.price || 0 }]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
+    setSelectedServices([]);
     if (selectedClient) {
-      setValue('treatment', '');
-      setValue('price', 0);
       setValue('date', format(new Date(), 'yyyy-MM-dd'));
     } else {
       reset();
@@ -103,6 +120,10 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
   };
 
   const onSubmit = async (data: FormData) => {
+    if (selectedServices.length === 0) {
+      alert('Seleziona almeno un trattamento');
+      return;
+    }
     setSubmitting(true);
     try {
       let clientId = selectedClient?.id;
@@ -119,37 +140,44 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
          onClientUpdated();
       }
 
+      const now = new Date();
+      const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
       if (editingId) {
+        // Edit mode supports only one record (legacy constraint or UI constraint)
+        // If we wanted to "edit" a bulk insertion, it's 3 separate rows.
+        // We only allow editing one ROW at a time from history.
+        const service = selectedServices[0];
         await updateAppointment(editingId, {
           date: data.date,
-          treatment: data.treatment,
-          price: Number(data.price),
-          // Keep existing start_time or update? For simplicity, we don't change time here yet unless we add field.
+          treatment: service.treatment,
+          price: service.price,
         });
-        alert('Appuntamento aggiornato!');
+        alert('Trattamento aggiornato!');
         setEditingId(null);
       } else {
-        // Default time for "Cashier" mode: Current Time
-        const now = new Date();
-        const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-        
-        await addAppointment({
-          client_id: clientId!,
-          date: data.date,
-          start_time: timeString,
-          treatment: data.treatment,
-          price: Number(data.price),
-        });
-        alert('Appuntamento registrato!');
+        // Bulk Insert
+        const promises = selectedServices.map(service => 
+          addAppointment({
+            client_id: clientId!,
+            date: data.date,
+            start_time: timeString,
+            treatment: service.treatment,
+            price: service.price,
+          })
+        );
+        await Promise.all(promises);
+        alert(`${selectedServices.length} trattamenti registrati!`);
       }
 
       if (selectedClient || clientId) fetchHistory(selectedClient?.id || clientId!);
       
       if (!editingId) {
-        setValue('treatment', '');
-        setValue('price', 0);
+        setSelectedServices([]);
+        setCurrentTreatment('');
+        setCurrentPrice('');
       } else {
-        cancelEdit(); // Reset form after edit
+        cancelEdit(); 
       }
       
     } catch (err) {
@@ -159,6 +187,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
       setSubmitting(false);
     }
   };
+
+  const totalAmount = selectedServices.reduce((sum, item) => sum + item.price, 0);
 
   return (
     <div className="space-y-6">
@@ -173,7 +203,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
             ) : (
               <>
                 <FileText className="text-indigo-600" size={20} />
-                Nuovo Trattamento
+                Nuova Registrazione (Cassa)
               </>
             )}
           </h2>
@@ -199,7 +229,6 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
                     className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                     placeholder="Nome"
                     readOnly={!!selectedClient}
-                    // If modifying, we shouldn't actally change the client person, just the appointment
                   />
                 </div>
               </div>
@@ -226,14 +255,9 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
                 />
               </div>
             </div>
-          </div>
-
-          {/* Treatment Info */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Dettagli Trattamento</h3>
             
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
+             <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Data Registrazione</label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input
@@ -243,34 +267,97 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
                 />
               </div>
             </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Trattamento</label>
-              <select
-                {...register('treatment', { required: true })}
-                onChange={handleTreatmentChange}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
-              >
-                 <option value="">Seleziona...</option>
-                 {TREATMENTS.map(t => (
-                   <option key={t} value={t}>{t}</option>
-                 ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Prezzo (€)</label>
-              <div className="relative">
-                <Euro className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register('price', { required: true, min: 0 })}
-                  className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                  placeholder="0.00"
-                />
+          {/* Services Builder */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider">
+               {editingId ? 'Modifica Servizio' : 'Carrello Servizi'}
+            </h3>
+            
+            {/* Add Service Input Group */}
+            {!editingId && (
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
+                 <div className="grid grid-cols-[1fr,100px] gap-2">
+                    <select
+                      value={currentTreatment}
+                      onChange={handleTreatmentSelect}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                    >
+                       <option value="">Aggiungi servizio...</option>
+                       {TREATMENTS.map(t => (
+                         <option key={t} value={t}>{t}</option>
+                       ))}
+                    </select>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={currentPrice}
+                        onChange={(e) => setCurrentPrice(e.target.value)}
+                        placeholder="€ 0.00"
+                        className="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm"
+                      />
+                    </div>
+                 </div>
+                 <button 
+                   type="button" 
+                   onClick={addService}
+                   disabled={!currentTreatment || !currentPrice}
+                   className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
+                    <Plus size={16} /> Aggiungi
+                 </button>
               </div>
+            )}
+
+            {/* Selected Services List */}
+            <div className="bg-white border boundary-slate-200 rounded-lg overflow-hidden">
+               {selectedServices.length > 0 ? (
+                 <ul className="divide-y divide-slate-100">
+                    {selectedServices.map((item, idx) => (
+                      <li key={idx} className="p-3 flex justify-between items-center text-sm">
+                         <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">{idx+1}</span>
+                            <span className="font-medium text-slate-700">{item.treatment}</span>
+                         </div>
+                         <div className="flex items-center gap-3">
+                            <span className="font-semibold text-slate-900">€ {item.price.toFixed(2)}</span>
+                            {!editingId && (
+                              <button type="button" onClick={() => removeService(idx)} className="text-slate-400 hover:text-red-500">
+                                <X size={16} />
+                              </button>
+                            )}
+                         </div>
+                      </li>
+                    ))}
+                 </ul>
+               ) : (
+                 <div className="p-6 text-center text-slate-400 text-sm italic">
+                   Nessun servizio selezionato
+                 </div>
+               )}
+               {selectedServices.length > 0 && (
+                 <div className="bg-slate-50 p-3 flex justify-between items-center font-bold text-slate-800 border-t border-slate-200">
+                    <span>Totale</span>
+                    <span>€ {totalAmount.toFixed(2)}</span>
+                 </div>
+               )}
             </div>
+            
+            {editingId && (
+               <div className="bg-amber-50 p-3 rounded text-amber-800 text-xs">
+                 In modifica puoi cambiare solo i dettagli dell'elemento selezionato.
+                 <div className="mt-2">
+                    <label className="block font-medium mb-1">Prezzo Modificato</label>
+                    <input 
+                       type="number" 
+                       value={selectedServices[0]?.price || 0}
+                       onChange={(e) => setSelectedServices([{ ...selectedServices[0], price: Number(e.target.value) }])}
+                       className="w-full p-2 border border-amber-300 rounded"
+                    />
+                 </div>
+               </div>
+            )}
           </div>
         </div>
 
@@ -286,16 +373,17 @@ export default function AppointmentForm({ selectedClient, onClientUpdated }: App
           )}
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || selectedServices.length === 0}
             className={`px-6 py-2 rounded-lg text-white font-medium flex items-center gap-2 transition-all shadow-md ${
               editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700'
             } disabled:opacity-70`}
           >
-            <Save size={18} />
-            {submitting ? 'Salvataggio...' : (editingId ? 'Aggiorna Trattamento' : 'Registra Trattamento')}
+            <ShoppingBag size={18} />
+            {submitting ? 'Salvataggio...' : (editingId ? 'Aggiorna Entrata' : 'Registra Incasso')}
           </button>
         </div>
       </form>
+
 
       {/* History Section */}
       {selectedClient && (
