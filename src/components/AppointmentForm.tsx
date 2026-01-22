@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { type Client, type Appointment } from '../types';
 import { useClients } from '../hooks/useClients';
 import { useAppointments } from '../hooks/useAppointments';
+import { useAuth } from '../context/AuthContext';
 import { TREATMENTS } from '../constants/treatments';
 import { supabase } from '../lib/supabase';
 
@@ -35,6 +36,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
     }
   });
 
+  const { user } = useAuth();
   const { addAppointment, getLastPriceForTreatment, getClientHistory, deleteAppointment, updateAppointment } = useAppointments();
   const { getClientByPhone } = useClients();
   const [history, setHistory] = useState<Appointment[]>([]);
@@ -181,11 +183,17 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
              // If they say NO, we create a duplicate (maybe they really want to?)
              // But usually you wouldn't want that.
          }
+if (!user) {
+             toast.error("Sessione scaduta. Ricarica la pagina.");
+             setSubmitting(false);
+             return;
+         }
 
          const { data: newClient, error } = await supabase.from('clients').insert([{
              first_name: data.first_name,
              last_name: data.last_name,
-             phone: data.phone
+             phone: data.phone,
+             user_id: user.id
          }]).select().single();
          
          if (error) throw error;
@@ -233,9 +241,9 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
         cancelEdit(); 
       }
       
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Errore nel salvataggio');
+      toast.error(`Errore nel salvataggio: ${err.message || err.error_description || 'Errore sconosciuto'}`);
     } finally {
       setSubmitting(false);
     }

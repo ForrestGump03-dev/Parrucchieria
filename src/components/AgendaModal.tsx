@@ -105,6 +105,38 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
     setSelectedServices(newServices);
   };
 
+  const handleDeleteAll = async () => {
+    if (!appointmentToEdit || !selectedClient) return;
+    
+    if (!confirm('Sei sicuro di voler eliminare questo appuntamento (e tutti i servizi collegati)?')) {
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // 1. Fetch all siblings from DB to be sure we get all IDs
+      const siblings = await getClientAppointmentsByTime(
+        appointmentToEdit.client_id, 
+        appointmentToEdit.date, 
+        appointmentToEdit.start_time
+      );
+      
+      const idsToDelete = siblings.map(s => s.id);
+      
+      // 2. Delete all
+      await Promise.all(idsToDelete.map(id => deleteAppointment(id)));
+      
+      toast.success('Appuntamento eliminato');
+      onSaved();
+      onClose();
+    } catch (error) {
+      console.error(error);
+      toast.error('Errore durante l\'eliminazione');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const onNewClientSubmit = async (data: NewClientFormData) => {
     setSubmitting(true);
     try {
@@ -394,6 +426,18 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                 </div>
 
                 <div className="mt-8 flex justify-end gap-3">
+                  {appointmentToEdit && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteAll}
+                      disabled={submitting}
+                      className="px-4 py-2 text-red-600 hover:bg-red-50 hover:text-red-700 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2 mr-auto"
+                    >
+                      <Trash2 size={18} />
+                      Elimina
+                    </button>
+                  )}
+                  
                   <button
                     type="submit"
                     disabled={submitting || selectedServices.length === 0}

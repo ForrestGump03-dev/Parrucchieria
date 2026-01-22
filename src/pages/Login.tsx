@@ -93,16 +93,18 @@ export default function Login() {
                 {loading ? <Loader2 className="animate-spin" size={20} /> : 'Accedi'}
               </button>
 
+              {import.meta.env.DEV && (
               <button
                 type="button"
                 onClick={() => {
-                  setEmail('admin@parrucchieria.it');
-                  setPassword('password123');
+                  setEmail('test@email.it');
+                  setPassword('123');
                 }}
                 className="w-full bg-indigo-50 text-indigo-600 py-3 rounded-xl font-medium hover:bg-indigo-100 transition-all text-sm"
               >
                 Usa Credenziali Demo
               </button>
+              )}
            </form>
 
            <div className="mt-6 text-center">

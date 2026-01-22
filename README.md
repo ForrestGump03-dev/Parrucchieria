@@ -40,6 +40,42 @@ Programma gestionale per parrucchieri sviluppato con React, Tailwind CSS e Supab
   - **Trend**: Confronto automatico della crescita rispetto al periodo precedente equivalente.
 - **Top Ranking**: Classifiche per Fatturato Servizi e Fedeltà Clienti.
 
+## Sviluppo & Ambienti (Workflow)
+
+Il progetto supporta la separazione tra ambiente di Sviluppo (DEV) e Produzione (PROD) per permettere aggiornamenti sicuri mentre i clienti usano l'app.
+
+### 1. Configurazione Ambienti
+- **Produzione (PROD)**: 
+  - File: `.env`
+  - Comando: `npm run build` / Esecuzione da Electron
+  - Dati: Reali dei clienti.
+- **Sviluppo (DEV)**:
+  - File: `.env.development`
+  - Comando: `npm run dev`
+  - Dati: Finti/Test.
+
+### 2. Inizializzare un Nuovo Ambiente (es. DEV)
+Se crei un nuovo progetto Supabase per lo sviluppo:
+1.  Copia le chiavi API nel file `.env.development`.
+2.  Vai nell'**SQL Editor** del nuovo progetto Supabase.
+3.  Esegui lo script: `supabase/migrations/000_init_full_schema.sql` per creare tabelle e attivare la sicurezza.
+
+### 3. Versione Desktop (Electron)
+Il progetto è configurato per essere trasformato in un file `.exe` installabile.
+
+**Comandi:**
+- **Avvio in modalità Sviluppo (App Desktop)**:
+  ```bash
+  npm run electron:dev
+  ```
+- **Creazione Eseguibile (.exe)**:
+  ```bash
+  npm run electron:pack
+  ```
+  Il file di installazione si troverà nella cartella `release/`.
+
+**Nota Icona**: Per personalizzare l'icona dell'eseguibile, sostituisci il file `public/favicon.ico` con il logo del tuo salone (deve essere formato .ico).
+
 ---
 
 ## Stato del Progetto e Dipendenze (21/01/2026)
