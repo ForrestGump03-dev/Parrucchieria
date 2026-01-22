@@ -22,11 +22,17 @@ export default function Login() {
       if (error) throw error;
       // Auth state change will be caught by AuthContext -> App router
     } catch (e: any) {
-      setError('Credenziali non valide o errore di connessione.');
+      console.error(e);
+      setError(e.message || 'Credenziali non valide o errore di connessione.');
     } finally {
       setLoading(false);
     }
   };
+
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const supportLink = isMobile
+    ? 'mailto:alessio.forestieri03@gmail.com'
+    : 'https://mail.google.com/mail/?view=cm&fs=1&to=alessio.forestieri03@gmail.com';
 
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
@@ -86,11 +92,22 @@ export default function Login() {
               >
                 {loading ? <Loader2 className="animate-spin" size={20} /> : 'Accedi'}
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail('admin@parrucchieria.it');
+                  setPassword('password123');
+                }}
+                className="w-full bg-indigo-50 text-indigo-600 py-3 rounded-xl font-medium hover:bg-indigo-100 transition-all text-sm"
+              >
+                Usa Credenziali Demo
+              </button>
            </form>
 
            <div className="mt-6 text-center">
              <p className="text-xs text-slate-400">
-               Problemi di accesso? Contatta l'assistenza.
+               Problemi di accesso? <a href={supportLink} target="_blank" rel="noopener noreferrer" className="underline">Contatta l'assistenza.</a>
              </p>
            </div>
         </div>
