@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
-import { Calendar, FileText, Phone, User, History as HistoryIcon, Pencil, Trash2, X, Plus, ShoppingBag } from 'lucide-react';
+import { Calendar, FileText, Phone, User, History as HistoryIcon, Pencil, Trash2, X, Plus, ShoppingBag, Check, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { type Client, type Appointment } from '../types';
 import { useClients } from '../hooks/useClients';
 import { useAppointments } from '../hooks/useAppointments';
 import { useAuth } from '../context/AuthContext';
-import { TREATMENTS } from '../constants/treatments';
 import { supabase } from '../lib/supabase';
+import { useTreatments } from '../hooks/useTreatments';
+import TreatmentManagerModal from './TreatmentManagerModal';
 
 interface AppointmentFormProps {
   selectedClient?: Client;
@@ -21,7 +22,7 @@ interface FormData {
   last_name: string;
   phone: string;
   date: string;
-  // removed single treatment/price
+  notes?: string;
 }
 
 interface ServiceItem {
@@ -38,18 +39,19 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
 
   const { user } = useAuth();
   const { addAppointment, getLastPriceForTreatment, getClientHistory, deleteAppointment, updateAppointment } = useAppointments();
-  const { getClientByPhone } = useClients();
+  const { getClientByPhone, updateClient } = useClients();
+  const { treatments } = useTreatments();
   const [history, setHistory] = useState<Appointment[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isEditingClient, setIsEditingClient] = useState(false);
+  const [isTreatmentManagerOpen, setIsTreatmentManagerOpen] = useState(false);
   
   // Watch phone for duplicate check
   const phoneValue = watch('phone');
 
   // Debounce duplicate check
   useEffect(() => {
-    // Only check if we are NOT editing an existing user (selectedClient is null)
-    // and we have a valid phone number length
     if (!selectedClient && phoneValue && phoneValue.length > 5) {
       const timer = setTimeout(async () => {
         const existing = await getClientByPhone(phoneValue);
@@ -84,9 +86,16 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
     const val = e.target.value;
     setCurrentTreatment(val);
     if (val) {
-      const price = await getLastPriceForTreatment(val);
-      if (price !== null) {
-        setCurrentPrice(price.toString());
+      // Find default price from treatment list first
+      const treatment = treatments.find(t => t.name === val);
+      if (treatment?.price) {
+          setCurrentPrice(treatment.price.toString());
+      } else {
+          // Fallback to history
+          const price = await getLastPriceForTreatment(val);
+          if (price !== null) {
+            setCurrentPrice(price.toString());
+          }
       }
     } else {
       setCurrentPrice('');
@@ -106,10 +115,10 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
     setSelectedServices(newServices);
   };
 
-  /* Restore useEffect for client selection reset */
   useEffect(() => {
     if (selectedClient) {
       if (!editingId) {
+        setIsEditingClient(false);
         setValue('first_name', selectedClient.first_name);
         setValue('last_name', selectedClient.last_name);
         setValue('phone', selectedClient.phone);
@@ -131,7 +140,6 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
   const handleEdit = (apt: Appointment) => {
     setEditingId(apt.id);
     setValue('date', apt.date);
-    // For editing, we load just that one service as a single item list
     setSelectedServices([{ treatment: apt.treatment, price: apt.price || 0 }]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -168,10 +176,9 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
       let clientId = selectedClient?.id;
 
       if (!clientId) {
-         // Double check duplicate before insert just in case
          const existing = await getClientByPhone(data.phone);
          if (existing) {
-             const confirmLoad = confirm(`Attenzione: Il numero ${data.phone} è già associato a ${existing.first_name} ${existing.last_name}. Vuoi usare questo cliente esistente invece di crearne uno nuovo (e doppio)?`);
+             const confirmLoad = confirm(`Attenzione: Il numero ${data.phone} è già associato a ${existing.first_name} ${existing.last_name}. Vuoi usare questo cliente esistente invece di crearne uno nuovo?`);
              if (confirmLoad) {
                 if(onSelectExistingClient) {
                     onSelectExistingClient(existing);
@@ -180,10 +187,9 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                     return;
                 }
              }
-             // If they say NO, we create a duplicate (maybe they really want to?)
-             // But usually you wouldn't want that.
          }
-if (!user) {
+         
+         if (!user) {
              toast.error("Sessione scaduta. Ricarica la pagina.");
              setSubmitting(false);
              return;
@@ -205,9 +211,6 @@ if (!user) {
       const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
       if (editingId) {
-        // Edit mode supports only one record (legacy constraint or UI constraint)
-        // If we wanted to "edit" a bulk insertion, it's 3 separate rows.
-        // We only allow editing one ROW at a time from history.
         const service = selectedServices[0];
         await updateAppointment(editingId, {
           date: data.date,
@@ -217,7 +220,6 @@ if (!user) {
         toast.success('Trattamento aggiornato!');
         setEditingId(null);
       } else {
-        // Bulk Insert
         const promises = selectedServices.map(service => 
           addAppointment({
             client_id: clientId!,
@@ -225,6 +227,7 @@ if (!user) {
             start_time: timeString,
             treatment: service.treatment,
             price: service.price,
+            notes: data.notes,
           })
         );
         await Promise.all(promises);
@@ -237,6 +240,7 @@ if (!user) {
         setSelectedServices([]);
         setCurrentTreatment('');
         setCurrentPrice('');
+        setValue('notes', '');
       } else {
         cancelEdit(); 
       }
@@ -249,10 +253,35 @@ if (!user) {
     }
   };
 
+  const saveClientChanges = async () => {
+    if (!selectedClient) return;
+    const currentValues = watch();
+
+    if (!currentValues.first_name || !currentValues.last_name || !currentValues.phone) {
+       toast.error("Tutti i campi sono obbligatori");
+       return;
+    }
+
+    try {
+      await updateClient(selectedClient.id, {
+        first_name: currentValues.first_name,
+        last_name: currentValues.last_name,
+        phone: currentValues.phone
+      });
+      toast.success("Cliente aggiornato!");
+      setIsEditingClient(false);
+      onClientUpdated();
+    } catch (err) {
+      console.error(err);
+      toast.error("Errore aggiornamento cliente");
+    }
+  };
+
   const totalAmount = selectedServices.reduce((sum, item) => sum + item.price, 0);
 
   return (
     <div className="space-y-6">
+      <TreatmentManagerModal isOpen={isTreatmentManagerOpen} onClose={() => setIsTreatmentManagerOpen(false)} />
       <form onSubmit={handleSubmit(onSubmit)} className={`bg-white p-6 rounded-xl shadow-sm border ${editingId ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200'}`}>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
@@ -273,8 +302,7 @@ if (!user) {
               <button 
                 type="button" 
                 onClick={() => {
-                  if(onSelectExistingClient) onSelectExistingClient(undefined as any); // Hack to clear selection
-                  // Better pass a dedicated clear prop but this works if parent handles undefined
+                  if(onSelectExistingClient) onSelectExistingClient(undefined as any);
                 }} 
                 className="text-slate-500 hover:text-indigo-600 flex items-center gap-1 text-sm bg-slate-100 px-3 py-1 rounded-full transition-colors"
               >
@@ -292,7 +320,42 @@ if (!user) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Client Info */}
           <div className="space-y-4">
-            <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Dati Cliente</h3>
+            <div className="flex justify-between items-center">
+               <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Dati Cliente</h3>
+               {selectedClient && (
+                  isEditingClient ? (
+                    <div className="flex gap-2">
+                       <button 
+                         type="button"
+                         onClick={saveClientChanges}
+                         className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200"
+                       >
+                         <Check size={14} /> Salva
+                       </button>
+                       <button 
+                         type="button"
+                         onClick={() => {
+                            setIsEditingClient(false);
+                            setValue('first_name', selectedClient.first_name);
+                            setValue('last_name', selectedClient.last_name);
+                            setValue('phone', selectedClient.phone);
+                         }}
+                         className="flex items-center gap-1 text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded hover:bg-slate-200"
+                       >
+                         <X size={14} /> Annulla
+                       </button>
+                    </div>
+                  ) : (
+                    <button 
+                      type="button"
+                      onClick={() => setIsEditingClient(true)}
+                      className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800"
+                    >
+                      <Pencil size={14} /> Modifica
+                    </button>
+                  )
+               )}
+            </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -301,9 +364,9 @@ if (!user) {
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                   <input
                     {...register('first_name', { required: true })}
-                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
                     placeholder="Nome"
-                    readOnly={!!selectedClient}
+                    readOnly={Boolean(selectedClient && !isEditingClient)}
                   />
                 </div>
               </div>
@@ -311,9 +374,9 @@ if (!user) {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Cognome</label>
                 <input
                   {...register('last_name', { required: true })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
                   placeholder="Cognome"
-                  readOnly={!!selectedClient}
+                  readOnly={Boolean(selectedClient && !isEditingClient)}
                 />
               </div>
             </div>
@@ -323,10 +386,20 @@ if (!user) {
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input
-                  {...register('phone', { required: true })}
-                  className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                  {...register('phone', { 
+                    required: true,
+                    pattern: {
+                      value: /^[0-9+]+$/,
+                      message: "Solo numeri e '+' sono consentiti"
+                    },
+                    onChange: (e) => {
+                       const clean = e.target.value.replace(/[^0-9+]/g, '');
+                       setValue('phone', clean); 
+                    }
+                  })}
+                  className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
                   placeholder="Numero di telefono"
-                  readOnly={!!selectedClient}
+                  readOnly={Boolean(selectedClient && !isEditingClient)}
                 />
               </div>
             </div>
@@ -352,16 +425,27 @@ if (!user) {
             
             {/* Add Service Input Group */}
             {!editingId && (
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
+              <div className="space-y-2">
+                 <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-semibold text-slate-500 uppercase">Servizio</label>
+                    <button 
+                       type="button" 
+                       onClick={() => setIsTreatmentManagerOpen(true)}
+                       className="text-indigo-600 hover:text-indigo-800 text-xs flex items-center gap-1"
+                       title="Gestisci Listino"
+                    >
+                        <Settings size={12} /> Impostazioni listino
+                    </button>
+                 </div>
                  <div className="grid grid-cols-[1fr,100px] gap-2">
                     <select
                       value={currentTreatment}
                       onChange={handleTreatmentSelect}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
                     >
-                       <option value="">Aggiungi servizio...</option>
-                       {TREATMENTS.map(t => (
-                         <option key={t} value={t}>{t}</option>
+                       <option value="">Seleziona servizio...</option>
+                       {treatments.map(t => (
+                         <option key={t.id} value={t.name}>{t.name}</option>
                        ))}
                     </select>
                     <div className="relative">
@@ -436,6 +520,18 @@ if (!user) {
           </div>
         </div>
 
+        {/* Note Field (New) */}
+        {!editingId && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+               <label className="block text-sm font-medium text-slate-700 mb-1">Note (Opzionale)</label>
+               <textarea
+                  {...register('notes')}
+                  placeholder="Appunti sul trattamento, formula colore, ecc..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 min-h-[80px]"
+               />
+            </div>
+        )}
+
         <div className="mt-8 flex justify-end gap-3">
           {editingId && (
             <button
@@ -476,6 +572,7 @@ if (!user) {
                  <tr>
                    <th className="px-6 py-3">Data</th>
                    <th className="px-6 py-3">Trattamento</th>
+                   <th className="px-6 py-3">Note</th>
                    <th className="px-6 py-3 text-right">Prezzo</th>
                    <th className="px-6 py-3 text-center">Azioni</th>
                  </tr>
@@ -486,6 +583,7 @@ if (!user) {
                      <tr key={item.id} className={`hover:bg-slate-50 transition-colors ${editingId === item.id ? 'bg-indigo-50/60' : ''}`}>
                        <td className="px-6 py-4 font-medium whitespace-nowrap">{format(new Date(item.date), 'dd/MM/yyyy')}</td>
                        <td className="px-6 py-4">{item.treatment}</td>
+                       <td className="px-6 py-4 text-xs text-slate-500 max-w-[200px] truncate" title={item.notes || ''}>{item.notes || '-'}</td>
                        <td className="px-6 py-4 text-right font-semibold">€ {(item.price || 0).toFixed(2)}</td>
                        <td className="px-6 py-4">
                          <div className="flex justify-center gap-2">
@@ -509,7 +607,7 @@ if (!user) {
                    ))
                  ) : (
                    <tr>
-                     <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">
+                     <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
                        <p className="mb-2">Nessun trattamento registrato per questo cliente.</p>
                        <span className="text-xs text-slate-300">Compila il form sopra per aggiungerne uno.</span>
                      </td>

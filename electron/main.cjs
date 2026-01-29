@@ -10,6 +10,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: false, // Disabilita CORS per permettere le chiamate a Supabase da file://
     },
     icon: path.join(__dirname, '../public/favicon.ico') // Assicurati di avere un'icona
   });

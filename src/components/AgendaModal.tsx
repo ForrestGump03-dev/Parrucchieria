@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { X, Save, Clock, UserPlus, ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { X, Save, Clock, UserPlus, ArrowLeft, Plus, Trash2, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { type Client, type Appointment } from '../types';
 import ClientList from './ClientList';
 import { useClients } from '../hooks/useClients';
 import { useAppointments } from '../hooks/useAppointments';
-import { TREATMENTS } from '../constants/treatments';
+import { useTreatments } from '../hooks/useTreatments';
+import TreatmentManagerModal from './TreatmentManagerModal';
 
- interface AgendaModalProps {
+interface AgendaModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialDate: Date | null;
@@ -34,12 +35,14 @@ interface ServiceItem {
 export default function AgendaModal({ isOpen, onClose, initialDate, appointmentToEdit, onSaved }: AgendaModalProps) {
   const { clients, addClient, fetchClients, getClientByPhone } = useClients(); 
   const { addAppointment, updateAppointment, getClientAppointmentsByTime, deleteAppointment } = useAppointments();
+  const { treatments } = useTreatments();
   
   const [step, setStep] = useState<'client' | 'details' | 'new-client'>('client');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [isTreatmentManagerOpen, setIsTreatmentManagerOpen] = useState(false);
   
   const { register, handleSubmit, setValue, reset } = useForm<ExternalFormData>();
-  const { register: registerNewClient, handleSubmit: handleSubmitNewClient, reset: resetNewClient } = useForm<NewClientFormData>();
+  const { register: registerNewClient, handleSubmit: handleSubmitNewClient, reset: resetNewClient, setValue: setValueNewClient } = useForm<NewClientFormData>();
   
   const [submitting, setSubmitting] = useState(false);
 
@@ -57,9 +60,6 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
         
         setValue('start_time', appointmentToEdit.start_time.slice(0, 5)); // HH:mm
         
-        // OLD: Load single existing service
-        // setSelectedServices([{ treatment: appointmentToEdit.treatment }]);
-
         // NEW: Load all siblings
         getClientAppointmentsByTime(appointmentToEdit.client_id, appointmentToEdit.date, appointmentToEdit.start_time)
           .then(siblings => {
@@ -151,7 +151,6 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
            setSubmitting(false);
            return;
         }
-        // If they assume logic is wrong, they might proceed creating duplicate.
       }
 
       const newClient = await addClient({
@@ -180,18 +179,6 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
       
       if (appointmentToEdit) {
          // EDIT SESSION MODE
-         // We have current `selectedServices` (some with ID, some new)
-         // We should also know which IDs were removed, but simpler is:
-         // 1. Get current IDs from DB (we did that on load) -> actually we don't store "original" list.
-         // Let's rely on Diffing against what we loaded. 
-         // Strategy: 
-         // - Valid IDs in `selectedServices` -> UPDATE (set time/date/treatment)
-         // - No ID in `selectedServices` -> INSERT
-         // - IDs that exist in DB matching criteria but NOT in `selectedServices` -> DELETE
-         // Problem: we didn't keep the original list to know what to delete.
-         
-         // Alternative Strategy: "Smart Sync" relies on fetch.
-         // Let's refetch state from DB to compare.
          const remoteSiblings = await getClientAppointmentsByTime(appointmentToEdit.client_id, appointmentToEdit.date, appointmentToEdit.start_time);
          const currentIds = selectedServices.map(s => s.id).filter(Boolean);
          const dbIds = remoteSiblings.map(s => s.id);
@@ -256,6 +243,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <TreatmentManagerModal isOpen={isTreatmentManagerOpen} onClose={() => setIsTreatmentManagerOpen(false)} />
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
@@ -318,7 +306,17 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Telefono *</label>
                   <input
-                    {...registerNewClient('phone', { required: true })}
+                    {...registerNewClient('phone', { 
+                      required: true,
+                      pattern: {
+                        value: /^[0-9+]+$/,
+                        message: "Solo numeri e '+' sono consentiti"
+                      },
+                      onChange: (e) => {
+                        const clean = e.target.value.replace(/[^0-9+]/g, '');
+                        setValueNewClient('phone', clean); 
+                      }
+                    })}
                     className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
@@ -359,43 +357,40 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                 </div>
 
                 {/* Services Builder */}
-                <div className="space-y-4">
-                   <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Servizi Richiesti</h3>
+                <div className="space-y-3">
+                   <div className="flex justify-between items-center">
+                       <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Servizi Richiesti</h3>
+                       <button 
+                         type="button" 
+                         onClick={() => setIsTreatmentManagerOpen(true)}
+                         className="text-indigo-600 hover:text-indigo-800 text-xs flex items-center gap-1"
+                         title="Gestisci Listino"
+                       >
+                         <Settings size={12} /> Impostazioni listino
+                       </button>
+                   </div>
                    
                    <div className="flex gap-2">
                         <select
                            value={currentTreatment}
                            onChange={(e) => {
-                              const val = e.target.value;
-                              /* REMOVED legacy edit restriction logic
-                              if (appointmentToEdit && selectedServices.length > 0) {
-                                  // In edit mode we replace directly because we only support editing one at a time for now
-                                  setSelectedServices([{ treatment: val }]);
-                                  setCurrentTreatment('');
-                              } else {
-                              */
-                                  setCurrentTreatment(val);
-                              //}
+                              setCurrentTreatment(e.target.value);
                            }}
                            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
                         >
-                           <option value="">{/* appointmentToEdit ? 'Modifica Servizio...' : */ 'Seleziona servizio...'}</option>
-                           {TREATMENTS.map(t => (
-                             <option key={t} value={t}>{t}</option>
+                           <option value="">Seleziona servizio...</option>
+                           {treatments.map(t => (
+                             <option key={t.id} value={t.name}>{t.name}</option>
                            ))}
                         </select>
-                        {/* Always show Add button now that we support multi-edit */
-                        // !appointmentToEdit && (
-                            <button 
+                        <button 
                             type="button" 
                             onClick={addService}
                             disabled={!currentTreatment}
                             className="bg-indigo-600 text-white px-3 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                            >
+                        >
                             <Plus size={20} />
-                            </button>
-                        // )
-                        }
+                        </button>
                    </div>
 
                    <div className="bg-white border boundary-slate-200 rounded-lg overflow-hidden">
@@ -404,11 +399,9 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                             {selectedServices.map((item, idx) => (
                               <li key={idx} className="p-3 flex justify-between items-center text-sm">
                                  <span className="font-medium text-slate-700">{item.treatment}</span>
-                                 {/* !appointmentToEdit && */ (
-                                   <button type="button" onClick={() => removeService(idx)} className="text-slate-400 hover:text-red-500">
+                                 <button type="button" onClick={() => removeService(idx)} className="text-slate-400 hover:text-red-500">
                                      <Trash2 size={16} />
-                                   </button>
-                                 )}
+                                 </button>
                               </li>
                             ))}
                          </ul>

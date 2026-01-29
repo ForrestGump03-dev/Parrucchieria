@@ -1,18 +1,28 @@
 export const TREATMENTS = [
-  "Taglio Donna",
-  "Taglio Uomo",
+  // Design
   "Piega",
-  "Colore Radice",
-  "Colore Totale",
-  "Meches / Colpi di Sole",
-  "Balayage / Schiariture",
+  "Taglio",
+  "Taglio Uomo",
+
+  // Cromia
+  "Ritocco Colore",
+  "Colore Intero",
+  "Ombreggiature",
   "Tonalizzante",
-  "Trattamento Ristrutturante",
-  "Keratina",
-  "Acconciatura",
-  "Extension",
-  "Barba",
-  "Sopracciglia"
+  
+  //Luminosità
+  "Balayage Naturale",
+  "Balayage Californiano",
+
+  // Servizi Cura
+  "Illumina Shampoo (Kerastase)",
+  "Special Shampoo (L'Oreal S.E.)",
+  "Trattamento Olaplex SPA",
+  "Premier SPA",
+
+  // Permanente
+  "Permanente Riccio",
+  "Permanente Waves"
 ] as const;
 
 export type TreatmentType = typeof TREATMENTS[number];

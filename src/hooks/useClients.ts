@@ -48,6 +48,22 @@ export function useClients() {
     return data;
   }
 
+  async function updateClient(id: string, updates: Partial<Omit<Client, 'id' | 'created_at' | 'created_by'>>) {
+    if (!user) throw new Error("Utente non autenticato");
+
+    const { data, error } = await supabase
+      .from('clients')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    
+    setClients((prev) => prev.map(c => c.id === id ? data : c));
+    return data;
+  }
+
   async function deleteClient(id: string) {
     // Prima eliminiamo gli appuntamenti collegati (altrimenti il DB dà errore per vincoli)
     await supabase.from('appointments').delete().eq('client_id', id);
@@ -72,5 +88,5 @@ export function useClients() {
      return data;
   }
 
-  return { clients, loading, error, fetchClients, addClient, deleteClient, getClientByPhone };
+  return { clients, loading, error, fetchClients, addClient, updateClient, deleteClient, getClientByPhone };
 }
