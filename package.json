@@ -1,9 +1,9 @@
 {
-  "name": "parrucchieria-manager",
+  "name": "root-manager",
   "private": true,
-  "version": "1.0.1",
-  "description": "Gestionale Parrucchieria",
-  "author": "Parrucchieria Team",
+  "version": "2.0.0",
+  "description": "Root Salon Manager - Gestionale Professionale",
+  "author": "Alessio Forestieri",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -55,8 +55,8 @@
     "wait-on": "^9.0.3"
   },
   "build": {
-    "appId": "com.parrucchieria.manager",
-    "productName": "GestionaleParrucchieria",
+    "appId": "com.root.manager",
+    "productName": "Root Manager",
     "directories": {
       "output": "release"
     },
@@ -67,7 +67,8 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "public/favicon.ico"
+      "executableName": "Root",
+      "icon": "public/icon.ico"
     },
     "nsis": {
       "oneClick": false,

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Scissors, Lock, Mail, Loader2 } from 'lucide-react';
+import { Lock, Mail, Loader2 } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -21,9 +21,11 @@ export default function Login() {
 
       if (error) throw error;
       // Auth state change will be caught by AuthContext -> App router
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      setError(e.message || 'Credenziali non valide o errore di connessione.');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const err = e as any;
+      setError(err.message || 'Credenziali non valide o errore di connessione.');
     } finally {
       setLoading(false);
     }
@@ -39,10 +41,10 @@ export default function Login() {
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
         {/* Brand Header */}
         <div className="bg-indigo-600 p-8 text-center">
-          <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-             <Scissors className="text-white transform -scale-x-100" size={32} />
+          <div className="w-24 h-24 bg-transparent mx-auto mb-4 flex items-center justify-center">
+             <img src="/splash.png" alt="Root Logo" className="max-w-full max-h-full object-contain drop-shadow-lg" />
           </div>
-          <h1 className="text-2xl font-bold text-white">Gestionale Parrucchieria</h1>
+          <h1 className="text-2xl font-bold text-white">Root Salon Manager</h1>
           <p className="text-indigo-200 text-sm mt-2">Accedi al tuo spazio di lavoro</p>
         </div>
 

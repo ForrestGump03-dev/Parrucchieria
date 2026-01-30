@@ -15,6 +15,18 @@ import ConfirmModal from '../components/ConfirmModal';
 import DeleteClientToast from '../components/DeleteClientToast';
 import { type Appointment } from '../types';
 
+interface CalendarEvent {
+  id: string;
+  title: string;
+  desc?: string;
+  start: Date;
+  end: Date;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  resource: any;
+  isCluster?: boolean;
+  events?: CalendarEvent[];
+}
+
 const locales = {
   'it': it,
 };
@@ -27,12 +39,7 @@ const localizer = dateFnsLocalizer({
   locales,
 });
 
-const formats = {
-  eventTimeRangeFormat: ({ start }: { start: Date }, culture: any, local: any) =>
-    local.format(start, 'HH:mm', culture),
-};
-
-const DnDCalendar = withDragAndDrop(Calendar);
+const DnDCalendar = withDragAndDrop<CalendarEvent>(Calendar);
 
 const parseDateTime = (dateStr: string, timeStr: string) => {
   return new Date(`${dateStr}T${timeStr}:00`);
@@ -41,7 +48,7 @@ const parseDateTime = (dateStr: string, timeStr: string) => {
 export default function Agenda() {
   const { getAppointmentsForRange, updateAppointment, deleteAppointment } = useAppointments();
   const { deleteClient } = useClients();
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [view, setView] = useState<View>(Views.DAY);
   const [date, setDate] = useState(new Date());
   
@@ -51,7 +58,7 @@ export default function Agenda() {
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
   // Context Menu state
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, event: any } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, event: CalendarEvent } | null>(null);
   
   // Custom Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -70,7 +77,7 @@ export default function Agenda() {
   }>({ isVisible: false, clientId: '', clientName: '' });
 
   // Cluster Selection State
-  const [clusterData, setClusterData] = useState<{ isOpen: boolean; events: any[] }>({ isOpen: false, events: [] });
+  const [clusterData, setClusterData] = useState<{ isOpen: boolean; events: CalendarEvent[] }>({ isOpen: false, events: [] });
 
   const fetchEvents = useCallback(async () => {
     // Calcola il range in base alla vista
@@ -83,26 +90,28 @@ export default function Agenda() {
       const data = await getAppointmentsForRange(start, end);
       // Filter out completed/paid treatments (price is not null)
       // Agenda should only show planned appointments
-      const calendarEvents = (data || [])
-        .filter(apt => apt.price === null)
+      if (!data) return;
+
+      const calendarEvents = data
+        .filter((apt: Appointment) => apt.price === null)
         .map((apt: Appointment) => {
-        const start = parseDateTime(apt.date, apt.start_time || '00:00');
+        const evtStart = parseDateTime(apt.date, apt.start_time || '00:00');
         // Default 30 min duration for better visualization
-        const end = addMinutes(start, 30);
+        const evtEnd = addMinutes(evtStart, 30);
         
         return {
           id: apt.id,
           title: `${apt.clients?.first_name} ${apt.clients?.last_name}`, 
           desc: apt.treatment,
-          start,
-          end,
+          start: evtStart,
+          end: evtEnd,
           resource: apt
         };
       });
       
       // Group overlapping events to avoid ugly overlapping visual
       const sortedEvents = calendarEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
-      const groupedEvents: any[] = [];
+      const groupedEvents: CalendarEvent[] = [];
       const MAX_CLUSTER_SPAN = 45 * 60 * 1000; // 45 minutes max grouping span
       
       for (const event of sortedEvents) {
@@ -114,6 +123,7 @@ export default function Agenda() {
             event.start.toDateString() === lastGroup.start.toDateString() &&
             (event.start.getTime() - lastGroup.start.getTime() < MAX_CLUSTER_SPAN)
         ) {
+           if (!lastGroup.events) lastGroup.events = [];
            lastGroup.events.push(event);
            // Extend group visual duration
            if (event.end > lastGroup.end) lastGroup.end = event.end;
@@ -142,7 +152,7 @@ export default function Agenda() {
 
       // Finalize structure: if > 1 event, it's a cluster
       const processedEvents = groupedEvents.map(g => {
-        if (g.events.length > 1) {
+        if (g.events && g.events.length > 1) {
           return {
             ...g,
             title: `${g.events.length} Appuntamenti`,
@@ -150,7 +160,7 @@ export default function Agenda() {
             resource: { isCluster: true, events: g.events }
           };
         }
-        return g.events[0]; // Return original single event
+        return g.events ? g.events[0] : g; // Return original single event
       });
 
       setEvents(processedEvents);
@@ -160,7 +170,8 @@ export default function Agenda() {
   }, [date, getAppointmentsForRange]);
 
   useEffect(() => {
-    fetchEvents();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchEvents();
     // Close context menu on click elsewhere
     const handleClick = () => setContextMenu(null);
     window.addEventListener('click', handleClick);
@@ -173,7 +184,7 @@ export default function Agenda() {
     setIsModalOpen(true);
   };
 
-  const handleSelectEvent = (event: any) => {
+  const handleSelectEvent = (event: CalendarEvent) => {
     // If it's a cluster, open selection modal
     if (event.resource?.isCluster) {
       setClusterData({ isOpen: true, events: event.resource.events });
@@ -186,7 +197,7 @@ export default function Agenda() {
   };
   
   // Custom Event component to handle display
-  const EventComponent = ({ event }: any) => {
+  const EventComponent = ({ event }: { event: CalendarEvent }) => {
     // Render Cluster
     if (event.resource?.isCluster) {
         return (
@@ -206,12 +217,12 @@ export default function Agenda() {
               }}
             >
                <div className="font-bold mb-0.5 w-full flex justify-between items-center whitespace-nowrap bg-white/10 px-0.5 rounded pointer-events-none">
-                 <span>{format(event.start, 'HH:mm')}-{format(event.end, 'HH:mm')}</span>
+                 <span>{format(event.start, 'HH:mm')}</span>
                  <span className="bg-white/20 px-1 rounded text-[9px]">{event.resource.events.length}</span>
                </div>
                
                <div className="flex flex-col gap-px w-full opacity-95 pointer-events-none">
-                 {event.resource.events.slice(0, 3).map((sub: any) => (
+                 {event.resource.events.slice(0, 3).map((sub: CalendarEvent) => (
                    <div key={sub.id} className="truncate leading-none flex items-center gap-1">
                      <span className="opacity-70 font-mono text-[9px]">{format(sub.start, 'HH:mm')}</span>
                      <span>{sub.title}</span>
@@ -249,7 +260,6 @@ export default function Agenda() {
       </div>
     );
   };
-
   const handleDeleteWait = () => {
     if (!contextMenu) return;
     const { event } = contextMenu;
@@ -266,7 +276,7 @@ export default function Agenda() {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           
           await deleteAppointment(event.id);
-          fetchEvents();
+          void fetchEvents();
           
           // Show non-blocking toast to optionally delete client
           if (event.resource.client_id) {
@@ -290,10 +300,11 @@ export default function Agenda() {
     setIsModalOpen(true);
   };
 
-  const handleEventDrop = async ({ event, start }: any) => {
+  const handleEventDrop = async ({ event, start }: { event: CalendarEvent, start: string | Date }) => {
+    const startDate = new Date(start);
     // Aggiorna data e ora
-    const dateStr = format(start, 'yyyy-MM-dd');
-    const timeStr = format(start, 'HH:mm');
+    const dateStr = format(startDate, 'yyyy-MM-dd');
+    const timeStr = format(startDate, 'HH:mm');
 
     try {
       await updateAppointment(event.id, {
@@ -315,6 +326,10 @@ export default function Agenda() {
     return {};
   };
 
+  const handleToastClose = useCallback(() => {
+    setDeleteToast(prev => ({ ...prev, isVisible: false }));
+  }, []);
+
   return (
     <div className="h-full flex flex-col space-y-4">
       <div className="flex justify-between items-center">
@@ -324,18 +339,21 @@ export default function Agenda() {
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 relative z-0">
         <DnDCalendar
           localizer={localizer}
-          events={events}
-          startAccessor={(event: any) => event.start}
-          endAccessor={(event: any) => event.end}
+          events={events} // CalendarEvent[] is compatible
+          startAccessor="start"
+          endAccessor="end"
           style={{ height: '100%', minHeight: '600px' }}
           culture="it"
           view={view}
-          formats={formats} // Custom formats (hidden end time)
+          formats={{
+            eventTimeRangeFormat: ({ start }: { start: Date }) => format(start, 'HH:mm'),
+          }}
           date={date}
           onView={(view) => setView(view)}
           onNavigate={(date) => setDate(date)}
           views={['month', 'week', 'day']}
           step={15}
+
           timeslots={2} // 2 slots per hour line = 30min visual blocks
           min={new Date(0, 0, 0, 8, 0, 0)} // Start 8:00
           max={new Date(0, 0, 0, 20, 0, 0)} // End 20:00
@@ -391,6 +409,9 @@ export default function Agenda() {
         initialDate={selectedDate}
         appointmentToEdit={editingAppointment}
         onSaved={fetchEvents}
+        onDeleteRequest={(clientId, clientName) => {
+          setDeleteToast({ isVisible: true, clientId, clientName });
+        }}
       />
       
       <ConfirmModal 
@@ -407,7 +428,7 @@ export default function Agenda() {
         onConfirm={() => {
           deleteClient(deleteToast.clientId)
             .then(() => {
-              fetchEvents(); // Refresh agenda
+              void fetchEvents(); // Refresh agenda
               setDeleteToast(prev => ({ ...prev, isVisible: false }));
               toast.success("Cliente eliminato definitivamente");
             })
@@ -416,7 +437,7 @@ export default function Agenda() {
               toast.error("Errore durante l'eliminazione del cliente");
             });
         }}
-        onClose={() => setDeleteToast(prev => ({ ...prev, isVisible: false }))}
+        onClose={handleToastClose}
       />
 
       {/* Cluster Selection Modal */}

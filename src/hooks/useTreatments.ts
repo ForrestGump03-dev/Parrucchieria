@@ -31,7 +31,7 @@ export function useTreatments() {
         // Opzionale: init automatico. Per ora lasciamo stare per dare controllo.
       }
 
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       toast.error('Errore caricamento listino');
     } finally {
@@ -43,7 +43,7 @@ export function useTreatments() {
     fetchTreatments();
   }, [fetchTreatments]);
 
-  async function addTreatment(name: string, category: string = 'Generale') {
+  const addTreatment = useCallback(async (name: string, category: string = 'Generale') => {
     if (!user) return;
     const { data, error } = await supabase
       .from('treatments')
@@ -57,9 +57,9 @@ export function useTreatments() {
     }
     setTreatments(prev => [...prev, data].sort((a,b) => a.name.localeCompare(b.name)));
     return data;
-  }
+  }, [user]);
 
-  async function updateTreatment(id: string, name: string) {
+  const updateTreatment = useCallback(async (id: string, name: string) => {
     const { data, error } = await supabase
       .from('treatments')
       .update({ name })
@@ -69,9 +69,9 @@ export function useTreatments() {
 
     if (error) throw error;
     setTreatments(prev => prev.map(t => t.id === id ? data : t).sort((a,b) => a.name.localeCompare(b.name)));
-  }
+  }, []);
 
-  async function deleteTreatment(id: string) {
+  const deleteTreatment = useCallback(async (id: string) => {
     const { error } = await supabase
       .from('treatments')
       .delete()
@@ -79,24 +79,25 @@ export function useTreatments() {
 
     if (error) throw error;
     setTreatments(prev => prev.filter(t => t.id !== id));
-  }
+  }, []);
   
-  async function seedDefaults() {
+  const seedDefaults = useCallback(async () => {
       if (!user) return;
-      const toInsert = DEFAULT_TREATMENTS.map(name => ({
-          name,
-          category: 'Default',
-          user_id: user.id
-      }));
+      const promises = DEFAULT_TREATMENTS.map(async (name) => {
+          // Check if exists
+          const { data } = await supabase.from('treatments').select('id').eq('name', name).eq('user_id', user.id).maybeSingle();
+          if(!data) {
+              return supabase.from('treatments').insert({ 
+                name, 
+                category: 'Generale', 
+                user_id: user.id 
+              });
+          }
+      });
       
-      const { data, error } = await supabase
-          .from('treatments')
-          .insert(toInsert)
-          .select();
-          
-      if (error) throw error;
-      if (data) setTreatments(data.sort((a,b) => a.name.localeCompare(b.name)));
-  }
+      await Promise.all(promises);
+      fetchTreatments();
+  }, [user, fetchTreatments]);
 
   return { 
       treatments, 

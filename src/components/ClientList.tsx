@@ -46,7 +46,7 @@ export default function ClientList({ clients, onSelect, selectedClientId, loadin
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           if (onClientDeleted) onClientDeleted();
           toast.success("Cliente eliminato con successo");
-        } catch (err) {
+        } catch {
           toast.error('Errore eliminazione cliente');
         }
       }

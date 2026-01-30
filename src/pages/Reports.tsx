@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useStats, type DateRange } from '../hooks/useStats';
-import { TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard, Award, UserCheck, Filter, ArrowRight } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard, Award, UserCheck, Filter, ArrowRight, Database, Download, CloudAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, parse, startOfDay, endOfDay, isValid } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { supabase } from '../lib/supabase';
+import { exportToCsv } from '../lib/utils';
 
 export default function Reports() {
   const { stats, loading, fetchStats } = useStats();
@@ -44,10 +46,11 @@ export default function Reports() {
       case 'month':
         newRange = { start: startOfMonth(today), end: endOfMonth(today), label: 'Questo Mese' };
         break;
-      case 'lastMonth':
+      case 'lastMonth': {
          const lastMonth = subMonths(today, 1);
          newRange = { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth), label: 'Mese Scorso' };
          break;
+      }
       case 'year':
         newRange = { start: startOfYear(today), end: endOfYear(today), label: "Quest'Anno" };
         break;
@@ -290,6 +293,117 @@ export default function Reports() {
             </div>
          </div>
       </div>
+      
+      {/* EXPORT SECTION */}
+      <BackupSection />
     </div>
   );
+}
+
+function BackupSection() {
+    const [loading, setLoading] = useState(false);
+
+    const handleBackup = async () => {
+        if (!confirm("Vuoi scaricare una copia di sicurezza di tutti i dati (Clienti, Appuntamenti, Storico)?")) return;
+        
+        setLoading(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error("Utente non autenticato");
+
+            // 1. Export Clients
+            const { data: clients, error: clientError } = await supabase
+                .from('clients')
+                .select('*')
+                .eq('user_id', user.id);
+            
+            if (clientError) throw clientError;
+
+            // 2. Export Appointments
+            const { data: appointments, error: apptError } = await supabase
+                .from('appointments')
+                .select('*, clients(first_name, last_name)')
+                .eq('user_id', user.id) // Ensure RLS policy compliance
+                .order('date', { ascending: false });
+
+            if (apptError) throw apptError;
+
+            // 3. Generate CSVs
+            const dateStr = format(new Date(), 'yyyy-MM-dd');
+            let exportedCount = 0;
+            
+            if (clients && clients.length > 0) {
+                 if(exportToCsv(`backup_clienti_${dateStr}.csv`, clients)) exportedCount++;
+            }
+            
+            if (appointments && appointments.length > 0) {
+                 // Flatten structure for CSV
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 const flatAppts = appointments.map((a: any) => ({
+                     id: a.id,
+                     client_id: a.client_id, // Critical for restoration
+                     date: a.date,
+                     start_time: a.start_time,
+                     client_name: a.clients ? `${a.clients.first_name} ${a.clients.last_name}` : 'Eliminato',
+                     treatment: a.treatment,
+                     price: a.price,
+                     notes: a.notes,
+                     created_at: a.created_at,
+                     user_id: a.user_id
+                 }));
+                 if(exportToCsv(`backup_storico_${dateStr}.csv`, flatAppts)) exportedCount++;
+            }
+
+            if (exportedCount > 0) {
+                 toast.success(`Backup completato! Scaricati ${exportedCount} file.`);
+                 // Save last backup date
+                 localStorage.setItem('lastBackup', Date.now().toString());
+            } else {
+                 toast("Nessun dato trovato da esportare.", { icon: 'ℹ️' });
+            }
+
+        } catch (err: unknown) {
+            console.error(err);
+            const msg = err instanceof Error ? err.message : 'Errore sconosciuto';
+            toast.error("Errore durante il backup: " + msg);
+        } finally {
+            setLoading(false);
+            // Fix: Restore window focus after download dialogs close to prevent "frozen" inputs
+            setTimeout(() => {
+                 window.focus();
+                 document.body.focus();
+            }, 1000);
+        }
+    };
+
+    return (
+        <div className="mt-12 border-t-2 border-slate-100 pt-8 pb-12">
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex items-start gap-4">
+                    <div className="p-3 bg-white rounded-full text-indigo-600 shadow-sm mt-1">
+                        <Database size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-800">Centro di Sicurezza Dati</h3>
+                        <p className="text-slate-600 text-sm max-w-xl mt-1">
+                            Poichè questa versione utilizza il cloud base, è consigliabile scaricare periodicamente una copia dei propri dati sul computer. Puoi aprire questi file con Excel.
+                        </p>
+                        <div className="flex items-center gap-2 mt-3 text-xs text-indigo-700 bg-indigo-100/50 w-fit px-2 py-1 rounded">
+                             <CloudAlert size={14} />
+                             Il sistema ti ricorderà di fare un backup ogni 15 giorni.
+                        </div>
+                    </div>
+                </div>
+                
+                <button 
+                  onClick={handleBackup}
+                  disabled={loading}
+                  className="whitespace-nowrap flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-md transition-all disabled:opacity-70"
+                >
+                    {loading ? <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <Download size={20} />}
+                    Scarica Backup Completo
+                </button>
+            </div>
+        </div>
+    );
 }

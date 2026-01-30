@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { X, Plus, Trash2, Pencil, Save, RefreshCw, Settings, AlertTriangle } from 'lucide-react';
+import { X, Plus, Trash2, Pencil, Save, Settings, AlertTriangle } from 'lucide-react';
 import { useTreatments } from '../hooks/useTreatments';
 import toast from 'react-hot-toast';
+import { type Treatment } from '../types';
 
 interface TreatmentManagerModalProps {
   isOpen: boolean;
@@ -10,7 +10,7 @@ interface TreatmentManagerModalProps {
 }
 
 export default function TreatmentManagerModal({ isOpen, onClose }: TreatmentManagerModalProps) {
-  const { treatments, addTreatment, updateTreatment, deleteTreatment, seedDefaults, loading } = useTreatments();
+  const { treatments, addTreatment, updateTreatment, deleteTreatment, loading } = useTreatments();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newTreatmentName, setNewTreatmentName] = useState('');
   const [editName, setEditName] = useState('');
@@ -24,12 +24,13 @@ export default function TreatmentManagerModal({ isOpen, onClose }: TreatmentMana
       await addTreatment(newTreatmentName.trim());
       setNewTreatmentName('');
       toast.success('Servizio aggiunto!');
-    } catch (error: any) {
-      toast.error(error.message || 'Errore aggiunta');
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Errore aggiunta';
+      toast.error(msg);
     }
   };
 
-  const startEdit = (t: any) => {
+  const startEdit = (t: Treatment) => {
     setEditingId(t.id);
     setEditName(t.name);
   };
@@ -40,7 +41,7 @@ export default function TreatmentManagerModal({ isOpen, onClose }: TreatmentMana
       await updateTreatment(editingId, editName.trim());
       setEditingId(null);
       toast.success('Aggiornato!');
-    } catch (error) {
+    } catch {
       toast.error('Errore aggiornamento');
     }
   };
@@ -50,23 +51,11 @@ export default function TreatmentManagerModal({ isOpen, onClose }: TreatmentMana
        try {
          await deleteTreatment(id);
          toast.success('Eliminato');
-       } catch (error) {
+       } catch {
          toast.error('Impossibile eliminare');
        }
     }
   };
-
-  const handleSeed = async () => {
-    if (treatments.length > 0) {
-        if(!confirm("Hai già dei trattamenti nel listino. Vuoi aggiungere anche quelli di default? Potrebbero crearsi duplicati.")) return;
-    }
-    try {
-        await seedDefaults();
-        toast.success("Listino base importato!");
-    } catch (err) {
-        toast.error("Errore importazione");
-    }
-  }
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
@@ -104,12 +93,7 @@ export default function TreatmentManagerModal({ isOpen, onClose }: TreatmentMana
           ) : treatments.length === 0 ? (
              <div className="text-center p-8 text-slate-500">
                 <p className="mb-4">Il tuo listino è vuoto.</p>
-                <button 
-                  onClick={handleSeed}
-                  className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200 text-sm flex items-center gap-2 mx-auto border border-slate-300"
-                >
-                    <RefreshCw size={16} /> Importa Listino Base
-                </button>
+                <p className="text-xs">Usa il form in alto per aggiungere servizi.</p>
              </div>
           ) : (
             treatments.map(t => (

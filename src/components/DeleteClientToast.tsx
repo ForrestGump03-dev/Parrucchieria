@@ -14,6 +14,7 @@ export default function DeleteClientToast({ isVisible, clientName, onConfirm, on
 
   useEffect(() => {
     if (!isVisible) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTimeLeft(duration / 1000);
     
     // Timer for countdown
@@ -36,7 +37,7 @@ export default function DeleteClientToast({ isVisible, clientName, onConfirm, on
       clearInterval(timer);
       clearTimeout(closeTimer);
     };
-  }, [isVisible, duration]); // Removed onClose from dependency to avoid loop if reference changes
+  }, [isVisible, duration, onClose]); // Added onClose to dependencies
 
   if (!isVisible) return null;
 

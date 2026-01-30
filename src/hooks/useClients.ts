@@ -20,8 +20,9 @@ export function useClients() {
 
       if (error) throw error;
       setClients(data || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      console.error(err);
+      setError('Errore caricamento clienti');
     } finally {
       setLoading(false);
     }
@@ -31,7 +32,7 @@ export function useClients() {
     fetchClients();
   }, [fetchClients]);
 
-  async function addClient(client: Omit<Client, 'id' | 'created_at'>) {
+  const addClient = useCallback(async (client: Omit<Client, 'id' | 'created_at'>) => {
     if (!user) throw new Error("Utente non autenticato");
     
     const { data, error } = await supabase
@@ -46,9 +47,9 @@ export function useClients() {
     if (error) throw error;
     setClients((prev) => [...prev, data]);
     return data;
-  }
+  }, [user]);
 
-  async function updateClient(id: string, updates: Partial<Omit<Client, 'id' | 'created_at' | 'created_by'>>) {
+  const updateClient = useCallback(async (id: string, updates: Partial<Omit<Client, 'id' | 'created_at' | 'created_by'>>) => {
     if (!user) throw new Error("Utente non autenticato");
 
     const { data, error } = await supabase
@@ -62,9 +63,9 @@ export function useClients() {
     
     setClients((prev) => prev.map(c => c.id === id ? data : c));
     return data;
-  }
+  }, [user]);
 
-  async function deleteClient(id: string) {
+  const deleteClient = useCallback(async (id: string) => {
     // Prima eliminiamo gli appuntamenti collegati (altrimenti il DB dà errore per vincoli)
     await supabase.from('appointments').delete().eq('client_id', id);
     
@@ -72,9 +73,9 @@ export function useClients() {
     if (error) throw error;
     
     setClients((prev) => prev.filter(c => c.id !== id));
-  }
+  }, []);
 
-  async function getClientByPhone(phone: string) {
+  const getClientByPhone = useCallback(async (phone: string) => {
      const { data, error } = await supabase
        .from('clients')
        .select('*')
@@ -86,7 +87,7 @@ export function useClients() {
        return null;
      }
      return data;
-  }
+  }, []);
 
   return { clients, loading, error, fetchClients, addClient, updateClient, deleteClient, getClientByPhone };
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { X, Save, Clock, UserPlus, ArrowLeft, Plus, Trash2, Settings } from 'lucide-react';
+import { X, Save, Clock, UserPlus, ArrowLeft, Trash2, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { type Client, type Appointment } from '../types';
 import ClientList from './ClientList';
@@ -15,6 +15,7 @@ interface AgendaModalProps {
   initialDate: Date | null;
   appointmentToEdit?: Appointment | null;
   onSaved: () => void;
+  onDeleteRequest?: (clientId: string, clientName: string) => void;
 }
 
 interface ExternalFormData {
@@ -32,7 +33,7 @@ interface ServiceItem {
   treatment: string;
 }
 
-export default function AgendaModal({ isOpen, onClose, initialDate, appointmentToEdit, onSaved }: AgendaModalProps) {
+export default function AgendaModal({ isOpen, onClose, initialDate, appointmentToEdit, onSaved, onDeleteRequest }: AgendaModalProps) {
   const { clients, addClient, fetchClients, getClientByPhone } = useClients(); 
   const { addAppointment, updateAppointment, getClientAppointmentsByTime, deleteAppointment } = useAppointments();
   const { treatments } = useTreatments();
@@ -86,17 +87,11 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
         }
       }
     }
-  }, [isOpen, initialDate, appointmentToEdit, setValue, reset, resetNewClient]);
+  }, [isOpen, initialDate, appointmentToEdit, setValue, reset, resetNewClient, getClientAppointmentsByTime]);
 
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client);
     setStep('details');
-  };
-
-  const addService = () => {
-    if (!currentTreatment) return;
-    setSelectedServices([...selectedServices, { treatment: currentTreatment }]);
-    setCurrentTreatment('');
   };
 
   const removeService = (index: number) => {
@@ -129,6 +124,10 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
       toast.success('Appuntamento eliminato');
       onSaved();
       onClose();
+
+      if (onDeleteRequest) {
+          onDeleteRequest(selectedClient.id, `${selectedClient.first_name} ${selectedClient.last_name}`);
+      }
     } catch (error) {
       console.error(error);
       toast.error('Errore durante l\'eliminazione');
@@ -374,23 +373,20 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                         <select
                            value={currentTreatment}
                            onChange={(e) => {
-                              setCurrentTreatment(e.target.value);
+                              const val = e.target.value;
+                              if (val) {
+                                  // Auto-add logic
+                                  setSelectedServices(prev => [...prev, { treatment: val }]);
+                                  setCurrentTreatment(''); // Reset immediately
+                              }
                            }}
                            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
                         >
-                           <option value="">Seleziona servizio...</option>
+                           <option value="">Seleziona servizio per aggiungere...</option>
                            {treatments.map(t => (
                              <option key={t.id} value={t.name}>{t.name}</option>
                            ))}
                         </select>
-                        <button 
-                            type="button" 
-                            onClick={addService}
-                            disabled={!currentTreatment}
-                            className="bg-indigo-600 text-white px-3 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                        >
-                            <Plus size={20} />
-                        </button>
                    </div>
 
                    <div className="bg-white border boundary-slate-200 rounded-lg overflow-hidden">

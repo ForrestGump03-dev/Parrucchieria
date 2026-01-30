@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import { Calendar, FileText, Phone, User, History as HistoryIcon, Pencil, Trash2, X, Plus, ShoppingBag, Check, Settings } from 'lucide-react';
@@ -115,6 +115,21 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
     setSelectedServices(newServices);
   };
 
+  const fetchHistory = useCallback(async (clientId: string) => {
+    const data = await getClientHistory(clientId);
+    setHistory(data || []);
+  }, [getClientHistory]);
+
+  const cancelEdit = useCallback(() => {
+    setEditingId(null);
+    setSelectedServices([]);
+    if (selectedClient) {
+      setValue('date', format(new Date(), 'yyyy-MM-dd'));
+    } else {
+      reset();
+    }
+  }, [selectedClient, setValue, reset]);
+
   useEffect(() => {
     if (selectedClient) {
       if (!editingId) {
@@ -130,12 +145,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
       setHistory([]);
       cancelEdit();
     }
-  }, [selectedClient, setValue]); 
-
-  async function fetchHistory(clientId: string) {
-    const data = await getClientHistory(clientId);
-    setHistory(data || []);
-  }
+  }, [selectedClient, setValue, editingId, fetchHistory, cancelEdit]); 
 
   const handleEdit = (apt: Appointment) => {
     setEditingId(apt.id);
@@ -144,23 +154,13 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const cancelEdit = () => {
-    setEditingId(null);
-    setSelectedServices([]);
-    if (selectedClient) {
-      setValue('date', format(new Date(), 'yyyy-MM-dd'));
-    } else {
-      reset();
-    }
-  };
-
   const handleDelete = async (id: string) => {
     if (confirm('Sei sicuro di voler eliminare questo trattamento dallo storico?')) {
       try {
         await deleteAppointment(id);
         if (selectedClient) fetchHistory(selectedClient.id);
         toast.success("Trattamento eliminato");
-      } catch (err) {
+      } catch {
         toast.error('Errore eliminazione');
       }
     }
@@ -245,9 +245,11 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
         cancelEdit(); 
       }
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error(`Errore nel salvataggio: ${err.message || err.error_description || 'Errore sconosciuto'}`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const e = err as any;
+      toast.error(`Errore nel salvataggio: ${e.message || e.error_description || 'Errore sconosciuto'}`);
     } finally {
       setSubmitting(false);
     }
@@ -302,7 +304,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
               <button 
                 type="button" 
                 onClick={() => {
-                  if(onSelectExistingClient) onSelectExistingClient(undefined as any);
+                  if(onSelectExistingClient) onSelectExistingClient(undefined);
                 }} 
                 className="text-slate-500 hover:text-indigo-600 flex items-center gap-1 text-sm bg-slate-100 px-3 py-1 rounded-full transition-colors"
               >

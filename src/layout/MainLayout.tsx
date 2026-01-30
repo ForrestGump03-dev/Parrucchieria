@@ -1,12 +1,21 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Calendar, Users, Scissors, BarChart3, LogOut } from 'lucide-react';
+import { Calendar, Users, BarChart3, LogOut, Bell } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
+import { useState } from 'react';
+import { useReminders } from '../hooks/useReminders';
+import { useNotifications } from '../context/NotificationContext';
+import NotificationSettingsModal from '../components/NotificationSettingsModal';
+import NotificationDrawer from '../components/NotificationDrawer';
 
 export default function MainLayout() {
   const location = useLocation();
   const { signOut, user } = useAuth();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const { settings, updateSettings } = useReminders();
+  const { unreadCount } = useNotifications();
   
   const navItems = [
     { path: '/', label: 'Agenda', icon: Calendar },
@@ -20,12 +29,21 @@ export default function MainLayout() {
       {/* Sidebar */}
       <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl">
         <div className="p-6 flex items-center gap-3 border-b border-slate-700">
-          <div className="bg-indigo-500 p-2 rounded-lg">
-            <Scissors className="h-6 w-6 text-white" />
+          <div className="w-10 h-10 flex items-center justify-center bg-white rounded-full p-0.5 overflow-hidden">
+             <img 
+               src="/logo.png" 
+               alt="Logo" 
+               className="w-full h-full object-contain"
+               onError={(e) => {
+                 // Fallback se logo.png non esiste -> mostra forbici
+                 e.currentTarget.style.display = 'none';
+                 e.currentTarget.parentElement!.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-600"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>';
+               }} 
+             />
           </div>
           <div>
-            <h1 className="font-bold text-lg leading-none">Gestionale</h1>
-            <span className="text-xs text-slate-400">Parrucchieria</span>
+            <h1 className="font-bold text-lg leading-none tracking-wide">Root</h1>
+            <span className="text-xs text-slate-400 font-medium">Salon Manager</span>
           </div>
         </div>
         
@@ -50,6 +68,19 @@ export default function MainLayout() {
               </Link>
             );
           })}
+
+          <button 
+            onClick={() => setIsDrawerOpen(true)}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-300 hover:bg-slate-800 hover:text-white w-full text-left mt-2"
+          >
+            <div className="relative">
+              <Bell size={20} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900 animate-pulse" />
+              )}
+            </div>
+            Notifiche
+          </button>
         </nav>
 
         <div className="p-4 border-t border-slate-800">
@@ -85,6 +116,22 @@ export default function MainLayout() {
           <Outlet />
         </div>
       </main>
+      
+      <NotificationDrawer 
+         isOpen={isDrawerOpen}
+         onClose={() => setIsDrawerOpen(false)}
+         onOpenSettings={() => {
+            setIsDrawerOpen(false);
+            setIsSettingsOpen(true);
+         }}
+      />
+
+      <NotificationSettingsModal 
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={settings}
+        onUpdate={updateSettings}
+      />
     </div>
   );
 }

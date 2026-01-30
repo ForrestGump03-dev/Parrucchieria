@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { type Appointment, type NewAppointment } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -7,7 +7,7 @@ export function useAppointments() {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
   
-  async function addAppointment(appointment: NewAppointment) {
+  const addAppointment = useCallback(async (appointment: NewAppointment) => {
     if (!user) throw new Error("Utente non autenticato");
 
     try {
@@ -26,9 +26,9 @@ export function useAppointments() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
 
-  async function getClientHistory(clientId: string) {
+  const getClientHistory = useCallback(async (clientId: string) => {
     
     const { data, error } = await supabase
       .from('appointments')
@@ -42,9 +42,9 @@ export function useAppointments() {
 
     if (error) throw error;
     return data as Appointment[];
-  }
+  }, []);
 
-  async function getAppointmentsForRange(start: Date, end: Date) {
+  const getAppointmentsForRange = useCallback(async (start: Date, end: Date) => {
      const { data, error } = await supabase
       .from('appointments')
       .select('*, clients(*)') // Join with clients to show name in calendar
@@ -53,27 +53,27 @@ export function useAppointments() {
       
     if (error) throw error;
     return data as Appointment[];
-  }
+  }, []);
 
-  async function deleteAppointment(id: string) {
+  const deleteAppointment = useCallback(async (id: string) => {
     const { error } = await supabase
       .from('appointments')
       .delete()
       .eq('id', id);
 
     if (error) throw error;
-  }
+  }, []);
 
-  async function updateAppointment(id: string, updates: Partial<NewAppointment>) {
+  const updateAppointment = useCallback(async (id: string, updates: Partial<NewAppointment>) => {
     const { error } = await supabase
       .from('appointments')
       .update(updates)
       .eq('id', id);
 
     if (error) throw error;
-  }
+  }, []);
 
-  async function getLastPriceForTreatment(treatment: string) {
+  const getLastPriceForTreatment = useCallback(async (treatment: string) => {
     const { data, error } = await supabase
       .from('appointments')
       .select('price')
@@ -88,9 +88,9 @@ export function useAppointments() {
     }
     
     return data?.price || null;
-  }
+  }, []);
 
-  async function getClientAppointmentsByTime(clientId: string, date: string, time: string) {
+  const getClientAppointmentsByTime = useCallback(async (clientId: string, date: string, time: string) => {
     const { data, error } = await supabase
       .from('appointments')
       .select('*')
@@ -101,7 +101,7 @@ export function useAppointments() {
       
     if (error) throw error;
     return data as Appointment[];
-  }
+  }, []);
 
   return { 
     addAppointment, 
