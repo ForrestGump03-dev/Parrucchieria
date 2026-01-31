@@ -1,9 +1,10 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { Calendar, Users, BarChart3, LogOut, Bell } from 'lucide-react';
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { useReminders } from '../hooks/useReminders';
 import { useNotifications } from '../context/NotificationContext';
 import NotificationSettingsModal from '../components/NotificationSettingsModal';
@@ -20,6 +21,17 @@ export default function MainLayout() {
   const { settings, updateSettings } = useReminders();
   const { unreadCount } = useNotifications();
   
+  // Listen for Password Recovery event to force open the change password modal
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordModalOpen(true);
+        toast('Imposta una nuova password per completare il recupero.', { icon: '🔑' });
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   const navItems = [
     { path: '/', label: 'Agenda', icon: Calendar },
     { path: '/clients', label: 'Clienti & Cassa', icon: Users },

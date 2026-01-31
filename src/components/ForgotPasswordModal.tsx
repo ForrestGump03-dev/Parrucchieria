@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Mail, Lock, CheckCircle, ArrowRight, X, Key, Loader2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, X, Key, Loader2, Link2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 
@@ -10,7 +10,7 @@ interface ForgotPasswordModalProps {
   defaultEmail?: string;
 }
 
-type Step = 'email' | 'otp' | 'newPassword';
+type Step = 'email' | 'token_and_password';
 
 export default function ForgotPasswordModal({ isOpen, onClose, defaultEmail = '' }: ForgotPasswordModalProps) {
   const [step, setStep] = useState<Step>('email');
@@ -19,72 +19,71 @@ export default function ForgotPasswordModal({ isOpen, onClose, defaultEmail = ''
   const [showPassword, setShowPassword] = useState(false);
 
   // Forms
-  const { register: registerEmail, handleSubmit: handleEmailSubmit, formState: { errors: emailErrors } } = useForm<{ email: string }>({
-    defaultValues: { email: defaultEmail }
-  });
+  const { register: registerEmail, handleSubmit: handleEmailSubmit, formState: { errors: emailErrors }, setValue: setEmailValue } = useForm<{ email: string }>();
   
-  const { register: registerOtp, handleSubmit: handleOtpSubmit, formState: { errors: otpErrors } } = useForm<{ token: string }>();
-  
-  const { register: registerPw, handleSubmit: handlePwSubmit, watch, formState: { errors: pwErrors } } = useForm<{ password: string, confirm: string }>();
+  // Combined Form for Token Hash + Password
+  const { register: registerCombined, handleSubmit: handleCombinedSubmit, watch, formState: { errors: combinedErrors } } = useForm<{ tokenHash: string, password: string, confirm: string }>();
   const newPassword = watch('password');
+
+  // Sync default email if modal opens
+  if (isOpen && !email && defaultEmail) {
+    setEmail(defaultEmail);
+    setEmailValue('email', defaultEmail);
+  }
 
   if (!isOpen) return null;
 
-  const onSendEmail = async (data: { email: string }) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(data.email);
-      if (error) throw error;
-      
-      setEmail(data.email);
-      toast.success('Codice inviato! Controlla la tua email.');
-      setStep('otp');
-    } catch (error) {
-      console.error(error);
-      toast.error('Errore invio email. Verifica l\'indirizzo.');
-    } finally {
-      setLoading(false);
-    }
-  };
+const onSendEmail = async (data: { email: string }) => {
+  setLoading(true);
+  try {
+    const cleanEmail = data.email.trim();
+    
+    // Usiamo la funzione specifica per il RESET
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
 
-  const onVerifyOtp = async (data: { token: string }) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.verifyOtp({
-        email,
-        token: data.token,
-        type: 'recovery',
-      });
-      
-      if (error) throw error;
-      
-      toast.success('Codice verificato! Imposta la nuova password.');
-      setStep('newPassword');
-    } catch (error) {
-      console.error(error);
-      toast.error('Codice non valido o scaduto.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (error) throw error;
+    
+    setEmail(cleanEmail);
+    toast.success('Codice di recupero inviato!');
+    setStep('token_and_password');
+  } catch (error: any) {
+    console.error(error);
+    toast.error(error.message || 'Errore invio email.');
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const onUpdatePassword = async (data: { password: string }) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.updateUser({ password: data.password });
-      if (error) throw error;
-      
-      toast.success('Password aggiornata con successo! Ora puoi accedere.');
-      onClose();
-      // Optional: auto login happens because updateUser updates the session, 
-      // but in 'recovery' mode verifyOtp logs the user in.
-    } catch (error) {
-      console.error(error);
-      toast.error('Errore aggiornamento password.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const onVerifyAndReset = async (data: { tokenHash: string, password: string }) => {
+  setLoading(true);
+  try {
+    // Verifica TOKEN di tipo 'recovery'
+    const { data: sessionData, error: verifyError } = await supabase.auth.verifyOtp({
+      email: email,
+      token: data.tokenHash.trim(),
+      type: 'recovery', // <--- Qui specifichi che è un reset password
+    });
+    
+    if (verifyError) throw new Error("Codice non valido o scaduto.");
+    if (!sessionData.session) throw new Error("Verifica fallita.");
+
+    // Aggiorna la password
+    const { error: updateError } = await supabase.auth.updateUser({ 
+      password: data.password 
+    });
+    
+    if (updateError) throw updateError;
+    
+    toast.success('Password aggiornata con successo!');
+    onClose();
+    
+  } catch (error: any) {
+    console.error("Errore:", error);
+    toast.error(error.message || 'Errore durante il reset.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -116,6 +115,7 @@ export default function ForgotPasswordModal({ isOpen, onClose, defaultEmail = ''
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input 
                     type="email"
+                    defaultValue={defaultEmail}
                     className={`w-full pl-10 pr-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 ${emailErrors.email ? 'border-red-500' : 'border-slate-300'}`}
                     placeholder="nome@esempio.com"
                     {...registerEmail('email', { required: "Email richiesta" })}
@@ -134,72 +134,70 @@ export default function ForgotPasswordModal({ isOpen, onClose, defaultEmail = ''
             </form>
           )}
 
-          {/* STEP 2: Inserimento OTP */}
-          {step === 'otp' && (
-            <form onSubmit={handleOtpSubmit(onVerifyOtp)} className="space-y-4">
-              <div className="text-center mb-2">
-                <div className="bg-indigo-50 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 text-indigo-600">
-                  <Mail size={24} />
-                </div>
-                <h3 className="font-semibold text-slate-800">Email Inviata!</h3>
-                <p className="text-xs text-slate-500">Abbiamo inviato un codice a <span className="font-bold">{email}</span></p>
+          {/* STEP 2: Inserimento Token Hash + Nuova Password */}
+          {step === 'token_and_password' && (
+            <form 
+              onSubmit={handleCombinedSubmit(
+                onVerifyAndReset, 
+                (errors) => {
+                  console.error("Form errors:", errors);
+                  toast.error("Compila tutti i campi correttamente.");
+                }
+              )} 
+              className="space-y-4"
+            >
+              <div className="text-center mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                <h3 className="font-semibold text-indigo-900 text-sm">Controlla la tua email</h3>
+                <p className="text-xs text-indigo-700 mt-1">Abbiamo inviato un link di recupero a <span className="font-bold">{email}</span></p>
               </div>
 
+              {/* Istruzioni */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                <p className="font-semibold mb-1 flex items-center gap-1">
+                  <Link2 size={14} /> Come fare:
+                </p>
+                <ol className="list-decimal ml-4 space-y-1">
+                  <li>Apri l'email ricevuta</li>
+                  <li>Copia il <strong>codice a 6 cifre</strong> mostrato</li>
+                  <li>Incollalo qui sotto</li>
+                </ol>
+              </div>
+
+              {/* Token Field */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Codice di verifica (OTP)</label>
+                <label className="text-sm font-medium text-slate-700">1. Codice di Verifica</label>
                 <input 
                   type="text"
-                  className={`w-full px-4 py-3 text-center text-2xl tracking-widest font-mono border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 ${otpErrors.token ? 'border-red-500' : 'border-slate-300'}`}
-                  placeholder="123456"
+                  inputMode="numeric"
                   maxLength={6}
-                  {...registerOtp('token', { required: "Codice richiesto" })}
+                  className={`w-full px-4 py-3 text-center text-2xl tracking-widest font-mono border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 ${combinedErrors.tokenHash ? 'border-red-500' : 'border-slate-300'}`}
+                  placeholder="000000"
+                  {...registerCombined('tokenHash', { 
+                    required: "Codice richiesto",
+                    pattern: { value: /^\d{6}$/, message: "Inserisci un codice completo" }
+                  })}
                 />
-                {otpErrors.token && <p className="text-xs text-red-500">{otpErrors.token.message}</p>}
+                {combinedErrors.tokenHash && <p className="text-xs text-red-500">{combinedErrors.tokenHash.message}</p>}
               </div>
 
-              <button 
-                type="submit" 
-                disabled={loading}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
-              >
-                {loading ? <Loader2 className="animate-spin" size={20} /> : 'Verifica Codice'}
-              </button>
-              
-              <button 
-                type="button"
-                onClick={() => setStep('email')}
-                className="w-full text-slate-400 hover:text-slate-600 text-sm py-1"
-              >
-                Indietro / Non ho ricevuto l'email
-              </button>
-            </form>
-          )}
+              <div className="h-px bg-slate-200 my-4"></div>
 
-          {/* STEP 3: Nuova Password */}
-          {step === 'newPassword' && (
-            <form onSubmit={handlePwSubmit(onUpdatePassword)} className="space-y-4">
-               <div className="flex items-center gap-2 text-emerald-600 text-sm font-medium bg-emerald-50 p-3 rounded-lg border border-emerald-100">
-                  <CheckCircle size={18} />
-                  Codice verificato correttamente.
-               </div>
-               
-               <p className="text-slate-600 text-sm mb-2">Scegli la tua nuova password</p>
-
-               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Nuova Password</label>
+              {/* Password Fields */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">2. Nuova Password</label>
                 <div className="relative">
                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                    <input 
                     type={showPassword ? "text" : "password"}
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 ${pwErrors.password ? 'border-red-500' : 'border-slate-300'}`}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 ${combinedErrors.password ? 'border-red-500' : 'border-slate-300'}`}
                     placeholder="Nuova password"
-                    {...registerPw('password', { 
+                    {...registerCombined('password', { 
                         required: "Password richiesta",
                         minLength: { value: 6, message: "Minimo 6 caratteri" }
                     })}
                    />
                 </div>
-                {pwErrors.password && <p className="text-xs text-red-500">{pwErrors.password.message}</p>}
+                {combinedErrors.password && <p className="text-xs text-red-500">{combinedErrors.password.message}</p>}
               </div>
 
               <div className="space-y-2">
@@ -207,18 +205,18 @@ export default function ForgotPasswordModal({ isOpen, onClose, defaultEmail = ''
                 <div className="relative">
                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                    <input 
-                    type="password"
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 ${pwErrors.confirm ? 'border-red-500' : 'border-slate-300'}`}
+                    type={showPassword ? "text" : "password"}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 ${combinedErrors.confirm ? 'border-red-500' : 'border-slate-300'}`}
                     placeholder="Ripeti password"
-                    {...registerPw('confirm', { 
+                    {...registerCombined('confirm', { 
                         validate: val => val === newPassword || "Le password non coincidono"
                     })}
                    />
                 </div>
-                {pwErrors.confirm && <p className="text-xs text-red-500">{pwErrors.confirm.message}</p>}
+                {combinedErrors.confirm && <p className="text-xs text-red-500">{combinedErrors.confirm.message}</p>}
               </div>
 
-               <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2">
                   <input 
                     type="checkbox" 
                     id="showPw" 
@@ -232,9 +230,17 @@ export default function ForgotPasswordModal({ isOpen, onClose, defaultEmail = ''
               <button 
                 type="submit" 
                 disabled={loading}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-70 mt-4 shadow-md"
               >
-                {loading ? <Loader2 className="animate-spin" size={20} /> : 'Aggiorna Password'}
+                {loading ? <Loader2 className="animate-spin" size={20} /> : 'Conferma e Aggiorna Password'}
+              </button>
+              
+              <button 
+                type="button"
+                onClick={() => setStep('email')}
+                className="w-full text-slate-400 hover:text-slate-600 text-sm py-2"
+              >
+                Indietro
               </button>
             </form>
           )}
