@@ -58,7 +58,7 @@
     "appId": "com.root.manager",
     "productName": "Root Manager",
     "directories": {
-      "output": "release"
+      "output": "release_new"
     },
     "files": [
       "dist/**/*",
@@ -68,7 +68,7 @@
     "win": {
       "target": "nsis",
       "executableName": "Root",
-      "icon": "public/icon.ico"
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,

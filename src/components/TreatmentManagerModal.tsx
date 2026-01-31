@@ -3,6 +3,7 @@ import { X, Plus, Trash2, Pencil, Save, Settings, AlertTriangle } from 'lucide-r
 import { useTreatments } from '../hooks/useTreatments';
 import toast from 'react-hot-toast';
 import { type Treatment } from '../types';
+import ConfirmModal from './ConfirmModal';
 
 interface TreatmentManagerModalProps {
   isOpen: boolean;
@@ -14,6 +15,9 @@ export default function TreatmentManagerModal({ isOpen, onClose }: TreatmentMana
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newTreatmentName, setNewTreatmentName] = useState('');
   const [editName, setEditName] = useState('');
+  
+  // Custom Confirmation State
+  const [itemToDelete, setItemToDelete] = useState<{id: string, name: string} | null>(null);
 
   if (!isOpen) return null;
 
@@ -46,18 +50,20 @@ export default function TreatmentManagerModal({ isOpen, onClose }: TreatmentMana
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (confirm(`Sei SICURO di voler eliminare per sempre "${name}" dal listino?\n\nQuesta azione non può essere annullata.`)) {
-       try {
-         await deleteTreatment(id);
-         toast.success('Eliminato');
-       } catch {
-         toast.error('Impossibile eliminare');
-       }
-    }
+  const confirmDelete = async () => {
+     if (!itemToDelete) return;
+     try {
+       await deleteTreatment(itemToDelete.id);
+       toast.success('Eliminato');
+     } catch {
+       toast.error('Impossibile eliminare');
+     } finally {
+       setItemToDelete(null);
+     }
   };
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
         <div className="p-4 bg-slate-800 text-white flex justify-between items-center">
@@ -116,7 +122,7 @@ export default function TreatmentManagerModal({ isOpen, onClose }: TreatmentMana
                             <button onClick={() => startEdit(t)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded">
                                 <Pencil size={16} />
                             </button>
-                            <button onClick={() => handleDelete(t.id, t.name)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded">
+                            <button onClick={() => setItemToDelete({ id: t.id, name: t.name })} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded">
                                 <Trash2 size={16} />
                             </button>
                         </div>
@@ -133,5 +139,17 @@ export default function TreatmentManagerModal({ isOpen, onClose }: TreatmentMana
         </div>
       </div>
     </div>
+
+    <ConfirmModal
+        isOpen={!!itemToDelete}
+        title="Elimina Servizio"
+        message={`Sei SICURO di voler eliminare "${itemToDelete?.name}" dal listino? Questa azione è irreversibile.`}
+        confirmText="Elimina"
+        cancelText="Annulla"
+        isDanger={true}
+        onConfirm={confirmDelete}
+        onCancel={() => setItemToDelete(null)}
+    />
+    </>
   );
 }

@@ -8,6 +8,7 @@ import { useClients } from '../hooks/useClients';
 import { useAppointments } from '../hooks/useAppointments';
 import { useTreatments } from '../hooks/useTreatments';
 import TreatmentManagerModal from './TreatmentManagerModal';
+import ConfirmModal from './ConfirmModal';
 
 interface AgendaModalProps {
   isOpen: boolean;
@@ -46,6 +47,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
   const { register: registerNewClient, handleSubmit: handleSubmitNewClient, reset: resetNewClient, setValue: setValueNewClient } = useForm<NewClientFormData>();
   
   const [submitting, setSubmitting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Multi-service state
   const [selectedServices, setSelectedServices] = useState<ServiceItem[]>([]);
@@ -100,13 +102,10 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
     setSelectedServices(newServices);
   };
 
-  const handleDeleteAll = async () => {
+  const performDelete = async () => {
     if (!appointmentToEdit || !selectedClient) return;
     
-    if (!confirm('Sei sicuro di voler eliminare questo appuntamento (e tutti i servizi collegati)?')) {
-      return;
-    }
-
+    setShowDeleteConfirm(false);
     setSubmitting(true);
     try {
       // 1. Fetch all siblings from DB to be sure we get all IDs
@@ -418,7 +417,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                   {appointmentToEdit && (
                     <button
                       type="button"
-                      onClick={handleDeleteAll}
+                      onClick={() => setShowDeleteConfirm(true)}
                       disabled={submitting}
                       className="px-4 py-2 text-red-600 hover:bg-red-50 hover:text-red-700 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2 mr-auto"
                     >
@@ -440,6 +439,17 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
            )}
         </div>
       </div>
+      
+      <ConfirmModal 
+        isOpen={showDeleteConfirm}
+        title="Elimina Appuntamento"
+        message="Sei sicuro di voler eliminare questo appuntamento e tutti i trattamenti collegati? Questa azione non può essere annullata."
+        confirmText="Sì, elimina tutto"
+        cancelText="Annulla"
+        isDanger={true}
+        onConfirm={performDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useTreatments } from '../hooks/useTreatments';
 import TreatmentManagerModal from './TreatmentManagerModal';
+import ConfirmModal from './ConfirmModal';
 
 interface AppointmentFormProps {
   selectedClient?: Client;
@@ -46,6 +47,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isEditingClient, setIsEditingClient] = useState(false);
   const [isTreatmentManagerOpen, setIsTreatmentManagerOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   
   // Watch phone for duplicate check
   const phoneValue = watch('phone');
@@ -154,15 +156,20 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Sei sicuro di voler eliminare questo trattamento dallo storico?')) {
-      try {
-        await deleteAppointment(id);
-        if (selectedClient) fetchHistory(selectedClient.id);
-        toast.success("Trattamento eliminato");
-      } catch {
-        toast.error('Errore eliminazione');
-      }
+  const handleDelete = (id: string) => {
+    setItemToDelete(id);
+  };
+
+  const performDelete = async () => {
+    if (!itemToDelete) return;
+    try {
+      await deleteAppointment(itemToDelete);
+      if (selectedClient) fetchHistory(selectedClient.id);
+      toast.success("Trattamento eliminato");
+    } catch {
+      toast.error('Errore eliminazione');
+    } finally {
+      setItemToDelete(null);
     }
   };
 
@@ -620,6 +627,17 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
            </div>
         </div>
       )}
+      
+      <ConfirmModal
+        isOpen={!!itemToDelete}
+        title="Elimina Trattamento"
+        message="Sei sicuro di voler eliminare questo trattamento dallo storico? Questa azione non può essere annullata."
+        confirmText="Sì, elimina"
+        cancelText="Annulla"
+        isDanger={true}
+        onConfirm={performDelete}
+        onCancel={() => setItemToDelete(null)}
+      />
     </div>
   );
 }

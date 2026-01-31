@@ -42,7 +42,8 @@ export default function Login() {
         {/* Brand Header */}
         <div className="bg-indigo-600 p-8 text-center">
           <div className="w-24 h-24 bg-transparent mx-auto mb-4 flex items-center justify-center">
-             <img src="/splash.png" alt="Root Logo" className="max-w-full max-h-full object-contain drop-shadow-lg" />
+             {/* Uso percorso relativo (senza slash iniziale) per compatibilità Electron/Prod */}
+             <img src="splash.png" alt="Root Logo" className="max-w-full max-h-full object-contain drop-shadow-lg" />
           </div>
           <h1 className="text-2xl font-bold text-white">Root Salon Manager</h1>
           <p className="text-indigo-200 text-sm mt-2">Accedi al tuo spazio di lavoro</p>

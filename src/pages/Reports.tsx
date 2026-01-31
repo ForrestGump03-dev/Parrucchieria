@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useStats, type DateRange } from '../hooks/useStats';
-import { TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard, Award, UserCheck, Filter, ArrowRight, Database, Download, CloudAlert } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard, Award, UserCheck, Filter, ArrowRight, Database, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, parse, startOfDay, endOfDay, isValid } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { supabase } from '../lib/supabase';
 import { exportToCsv } from '../lib/utils';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function Reports() {
   const { stats, loading, fetchStats } = useStats();
@@ -302,11 +303,12 @@ export default function Reports() {
 
 function BackupSection() {
     const [loading, setLoading] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
 
-    const handleBackup = async () => {
-        if (!confirm("Vuoi scaricare una copia di sicurezza di tutti i dati (Clienti, Appuntamenti, Storico)?")) return;
-        
+    const performBackup = async () => {
         setLoading(true);
+        setShowConfirm(false);
+        
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error("Utente non autenticato");
@@ -388,15 +390,12 @@ function BackupSection() {
                         <p className="text-slate-600 text-sm max-w-xl mt-1">
                             Poichè questa versione utilizza il cloud base, è consigliabile scaricare periodicamente una copia dei propri dati sul computer. Puoi aprire questi file con Excel.
                         </p>
-                        <div className="flex items-center gap-2 mt-3 text-xs text-indigo-700 bg-indigo-100/50 w-fit px-2 py-1 rounded">
-                             <CloudAlert size={14} />
-                             Il sistema ti ricorderà di fare un backup ogni 15 giorni.
-                        </div>
+                        
                     </div>
                 </div>
                 
                 <button 
-                  onClick={handleBackup}
+                  onClick={() => setShowConfirm(true)}
                   disabled={loading}
                   className="whitespace-nowrap flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-md transition-all disabled:opacity-70"
                 >
@@ -404,6 +403,16 @@ function BackupSection() {
                     Scarica Backup Completo
                 </button>
             </div>
+
+            <ConfirmModal 
+                isOpen={showConfirm}
+                title="Conferma Backup"
+                message="Vuoi davvero scaricare una copia completa di tutti i dati (Clienti, Appuntamenti, Storico)? Questa operazione genererà dei file CSV."
+                confirmText="Sì, scarica dati"
+                cancelText="Annulla"
+                onConfirm={performBackup}
+                onCancel={() => setShowConfirm(false)}
+            />
         </div>
     );
 }

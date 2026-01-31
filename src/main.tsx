@@ -4,12 +4,15 @@ import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './context/AuthContext.tsx'
 import { NotificationProvider } from './context/NotificationContext.tsx'
+import { TreatmentProvider } from './context/TreatmentContext.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
       <NotificationProvider>
-        <App />
+        <TreatmentProvider>
+          <App />
+        </TreatmentProvider>
       </NotificationProvider>
     </AuthProvider>
   </StrictMode>,

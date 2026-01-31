@@ -2,6 +2,15 @@ const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
 const isDev = process.env.NODE_ENV === 'development';
 
+// Helper per i percorsi (gestisce sia dev che prod/asar)
+const getAssetPath = (asset) => {
+  if (isDev) {
+    return path.join(__dirname, '../public', asset);
+  }
+  // In produzione, i file 'public' vengono copiati nella cartella 'dist'
+  return path.join(__dirname, '../dist', asset);
+};
+
 let mainWindow = null;
 let splashWindow = null;
 
@@ -13,13 +22,20 @@ function createSplashWindow() {
     alwaysOnTop: true,       // Sempre in primo piano
     transparent: true,       // Sfondo trasparente (se supportato)
     resizable: false,
-    icon: path.join(__dirname, '../public/logo.png'), // Icona app
+    icon: getAssetPath('logo.png'), // Icona app adattiva
     webPreferences: {
       nodeIntegration: false
     }
   });
 
-  const splashPath = path.join(__dirname, '../public/splash.html');
+  // Splash Path logic
+  // In dev: ../public/splash.html
+  // In prod: ../dist/splash.html (se vite lo copia, ma vite copia gli assets...)
+  // ATTENZIONE: i file .html in public vengono copiati in dist.
+  const splashPath = isDev 
+     ? path.join(__dirname, '../public/splash.html') 
+     : path.join(__dirname, '../dist/splash.html');
+     
   splashWindow.loadFile(splashPath);
   
   splashWindow.on('closed', () => {
@@ -41,7 +57,7 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: false,
     },
-    icon: path.join(__dirname, '../public/logo.png')
+    icon: getAssetPath('logo.png')
   });
 
   mainWindow.setMenuBarVisibility(false);

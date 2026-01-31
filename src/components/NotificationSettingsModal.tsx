@@ -60,7 +60,6 @@ export default function NotificationSettingsModal({
                             onChange={(e) => onUpdate({ backupIntervalDays: Number(e.target.value) })}
                             className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-slate-50"
                        >
-                           <option value={1}>1 giorno (test)</option>
                            <option value={7}>7 giorni</option>
                            <option value={14}>14 giorni (consigliato)</option>
                            <option value={30}>30 giorni</option>

@@ -8,11 +8,14 @@ import { useReminders } from '../hooks/useReminders';
 import { useNotifications } from '../context/NotificationContext';
 import NotificationSettingsModal from '../components/NotificationSettingsModal';
 import NotificationDrawer from '../components/NotificationDrawer';
+import ChangePasswordModal from '../components/ChangePasswordModal';
+import { Lock } from 'lucide-react';
 
 export default function MainLayout() {
   const location = useLocation();
   const { signOut, user } = useAuth();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const { settings, updateSettings } = useReminders();
   const { unreadCount } = useNotifications();
@@ -30,8 +33,9 @@ export default function MainLayout() {
       <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl">
         <div className="p-6 flex items-center gap-3 border-b border-slate-700">
           <div className="w-10 h-10 flex items-center justify-center bg-white rounded-full p-0.5 overflow-hidden">
+             {/* Uso percorso relativo 'logo.png' invece di '/logo.png' per Electron Prod */}
              <img 
-               src="/logo.png" 
+               src="logo.png" 
                alt="Logo" 
                className="w-full h-full object-contain"
                onError={(e) => {
@@ -95,6 +99,14 @@ export default function MainLayout() {
            </div>
            
            <button 
+             onClick={() => setIsPasswordModalOpen(true)}
+             className="w-full flex items-center gap-3 px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-sm mb-1"
+           >
+             <Lock size={18} />
+             <span>Cambia Password</span>
+           </button>
+
+           <button 
              onClick={signOut} 
              className="w-full flex items-center gap-3 px-4 py-2 text-slate-400 hover:text-white hover:bg-red-500/10 rounded-lg transition-colors text-sm"
            >
@@ -131,6 +143,10 @@ export default function MainLayout() {
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onUpdate={updateSettings}
+      />
+      <ChangePasswordModal 
+        isOpen={isPasswordModalOpen} 
+        onClose={() => setIsPasswordModalOpen(false)} 
       />
     </div>
   );
