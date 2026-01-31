@@ -153,6 +153,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
     setEditingId(apt.id);
     setValue('date', apt.date);
     setSelectedServices([{ treatment: apt.treatment, price: apt.price || 0 }]);
+    // Popola anche le note nello spazio del form in modo da poterle modificare
+    setValue('notes', apt.notes || '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -223,6 +225,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
           date: data.date,
           treatment: service.treatment,
           price: service.price,
+          notes: data.notes,
         });
         toast.success('Trattamento aggiornato!');
         setEditingId(null);
@@ -529,17 +532,15 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
           </div>
         </div>
 
-        {/* Note Field (New) */}
-        {!editingId && (
-            <div className="mt-4 pt-4 border-t border-slate-100">
-               <label className="block text-sm font-medium text-slate-700 mb-1">Note (Opzionale)</label>
-               <textarea
-                  {...register('notes')}
-                  placeholder="Appunti sul trattamento, formula colore, ecc..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 min-h-[80px]"
-               />
-            </div>
-        )}
+          {/* Note Field (New) - mostrato anche in modifica per poter aggiornare le note */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Note (Opzionale)</label>
+            <textarea
+              {...register('notes')}
+              placeholder="Appunti sul trattamento, formula colore, ecc..."
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 min-h-[80px]"
+            />
+          </div>
 
         <div className="mt-8 flex justify-end gap-3">
           {editingId && (
