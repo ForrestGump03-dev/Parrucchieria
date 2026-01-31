@@ -117,7 +117,7 @@ export default function MainLayout() {
 
         <div className="p-4 border-t border-slate-800">
           <div className="text-xs text-slate-500 text-center">
-            v1.0.1 &copy; 2026
+            v2.0.0 &copy; 2026
           </div>
         </div>
       </aside>
