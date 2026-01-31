@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Lock, Mail, Loader2 } from 'lucide-react';
+import { Lock, Mail, Loader2, HelpCircle } from 'lucide-react';
+import ForgotPasswordModal from '../components/ForgotPasswordModal';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +90,17 @@ export default function Login() {
                 </div>
               </div>
 
+              <div className="flex justify-end">
+                <button 
+                  type="button" 
+                  onClick={() => setIsForgotModalOpen(true)}
+                  className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1"
+                >
+                  <HelpCircle size={12} />
+                  Password dimenticata?
+                </button>
+              </div>
+
               <button 
                 type="submit" 
                 disabled={loading}
@@ -112,11 +125,17 @@ export default function Login() {
 
            <div className="mt-6 text-center">
              <p className="text-xs text-slate-400">
-               Problemi di accesso? <a href={supportLink} target="_blank" rel="noopener noreferrer" className="underline">Contatta l'assistenza.</a>
+               Per qualsiasi dubbio <a href={supportLink} target="_blank" rel="noopener noreferrer" className="underline">contatta l'assistenza.</a>
              </p>
            </div>
         </div>
       </div>
+
+      <ForgotPasswordModal 
+        isOpen={isForgotModalOpen} 
+        onClose={() => setIsForgotModalOpen(false)} 
+        defaultEmail={email}
+      />
     </div>
   );
 }
