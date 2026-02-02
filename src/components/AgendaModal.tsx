@@ -7,8 +7,11 @@ import ClientList from './ClientList';
 import { useClients } from '../hooks/useClients';
 import { useAppointments } from '../hooks/useAppointments';
 import { useTreatments } from '../hooks/useTreatments';
+import { useStaff } from '../hooks/useStaff';
 import TreatmentManagerModal from './TreatmentManagerModal';
+import StaffManagerModal from './StaffManagerModal';
 import ConfirmModal from './ConfirmModal';
+import { addMinutes, format } from 'date-fns';
 
 interface AgendaModalProps {
   isOpen: boolean;
@@ -21,6 +24,7 @@ interface AgendaModalProps {
 
 interface ExternalFormData {
   start_time: string;
+  staff_id?: string;
 }
 
 interface NewClientFormData {
@@ -32,16 +36,19 @@ interface NewClientFormData {
 interface ServiceItem {
   id?: string;
   treatment: string;
+  duration: number;
 }
 
 export default function AgendaModal({ isOpen, onClose, initialDate, appointmentToEdit, onSaved, onDeleteRequest }: AgendaModalProps) {
   const { clients, addClient, fetchClients, getClientByPhone } = useClients(); 
   const { addAppointment, updateAppointment, getClientAppointmentsByTime, deleteAppointment } = useAppointments();
   const { treatments } = useTreatments();
+  const { staff } = useStaff();
   
   const [step, setStep] = useState<'client' | 'details' | 'new-client'>('client');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isTreatmentManagerOpen, setIsTreatmentManagerOpen] = useState(false);
+  const [isStaffManagerOpen, setIsStaffManagerOpen] = useState(false);
   
   const { register, handleSubmit, setValue, reset } = useForm<ExternalFormData>();
   const { register: registerNewClient, handleSubmit: handleSubmitNewClient, reset: resetNewClient, setValue: setValueNewClient } = useForm<NewClientFormData>();
@@ -62,16 +69,27 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
         if(appointmentToEdit.clients) setSelectedClient(appointmentToEdit.clients);
         
         setValue('start_time', appointmentToEdit.start_time.slice(0, 5)); // HH:mm
-        
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        setValue('staff_id', appointmentToEdit.staff_id || '');
+
         // NEW: Load all siblings
         getClientAppointmentsByTime(appointmentToEdit.client_id, appointmentToEdit.date, appointmentToEdit.start_time)
           .then(siblings => {
               if (siblings && siblings.length > 0) {
-                 const mapped = siblings.map(s => ({ id: s.id, treatment: s.treatment }));
+                 const mapped = siblings.map(s => ({ 
+                   id: s.id, 
+                   treatment: s.treatment,
+                   duration: s.duration || 30 // Load duration
+                 }));
                  setSelectedServices(mapped);
               } else {
                  // Fallback if query fails but we have the prop
-                 setSelectedServices([{ id: appointmentToEdit.id, treatment: appointmentToEdit.treatment }]);
+                 setSelectedServices([{ 
+                   id: appointmentToEdit.id, 
+                   treatment: appointmentToEdit.treatment,
+                   duration: appointmentToEdit.duration || 30 
+                  }]);
               }
           });
 
@@ -99,6 +117,12 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
   const removeService = (index: number) => {
     const newServices = [...selectedServices];
     newServices.splice(index, 1);
+    setSelectedServices(newServices);
+  };
+  
+  const updateDuration = (index: number, newDuration: number) => {
+    const newServices = [...selectedServices];
+    newServices[index].duration = newDuration;
     setSelectedServices(newServices);
   };
 
@@ -164,6 +188,15 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
     }
   };
 
+  // Helper for sequential time calc
+  const addMinutesToTime = (timeStr: string, minutesToAdd: number) => {
+    const [hours, mins] = timeStr.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, mins, 0, 0);
+    const newDate = addMinutes(date, minutesToAdd);
+    return format(newDate, 'HH:mm');
+  };
+
   const onSubmit = async (data: ExternalFormData) => {
     if (!selectedClient) return;
     if (selectedServices.length === 0) {
@@ -175,6 +208,9 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
     try {
       const dateStr = (appointmentToEdit ? appointmentToEdit.date : initialDate?.toISOString().split('T')[0]) || new Date().toISOString().split('T')[0];
       
+      // Sequential time logic initialization
+      let currentStartTime = data.start_time;
+
       if (appointmentToEdit) {
          // EDIT SESSION MODE
          const remoteSiblings = await getClientAppointmentsByTime(appointmentToEdit.client_id, appointmentToEdit.date, appointmentToEdit.start_time);
@@ -188,42 +224,57 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
          }
 
          // 2. Update existing & Insert new
-         const upsertPromises = selectedServices.map(service => {
+         // We must do this sequentially to update times
+         for (const service of selectedServices) {
+            // Calculate next start time for NEXT iteration, but save CURRENT
+            const duration = service.duration || 30;
+            const thisSlotStart = currentStartTime;
+            
             if (service.id) {
-                // Update
-                return updateAppointment(service.id, {
+                await updateAppointment(service.id, {
                     client_id: selectedClient.id,
                     date: dateStr,
-                    start_time: data.start_time,
+                    start_time: thisSlotStart,
                     treatment: service.treatment,
-                    price: null
+                    price: null,
+                    staff_id: data.staff_id || null,
+                    duration: duration
                 });
             } else {
-                // Insert
-                return addAppointment({
+                await addAppointment({
                     client_id: selectedClient.id,
                     date: dateStr,
-                    start_time: data.start_time,
+                    start_time: thisSlotStart,
                     treatment: service.treatment,
-                    price: null, 
+                    price: null,
+                    staff_id: data.staff_id || null,
+                    duration: duration
                 });
             }
-         });
-         await Promise.all(upsertPromises);
+            
+            // Advance time
+            currentStartTime = addMinutesToTime(thisSlotStart, duration);
+         }
          
          toast.success("Appuntamento aggiornato!");
       } else {
-        // Bulk Create
-        const promises = selectedServices.map(service => 
-          addAppointment({
+        // Bulk Create (Sequential)
+        for (const service of selectedServices) {
+           const duration = service.duration || 30;
+           const thisSlotStart = currentStartTime;
+           
+           await addAppointment({
             client_id: selectedClient.id,
             date: dateStr,
-            start_time: data.start_time,
+            start_time: thisSlotStart,
             treatment: service.treatment,
-            price: null, // Always null for agenda bookings
-          })
-        );
-        await Promise.all(promises);
+            price: null,
+            staff_id: data.staff_id || null,
+            duration: duration
+          });
+          
+          currentStartTime = addMinutesToTime(thisSlotStart, duration);
+        }
       }
       
       onSaved();
@@ -242,6 +293,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <TreatmentManagerModal isOpen={isTreatmentManagerOpen} onClose={() => setIsTreatmentManagerOpen(false)} />
+      <StaffManagerModal isOpen={isStaffManagerOpen} onClose={() => setIsStaffManagerOpen(false)} />
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
@@ -342,15 +394,33 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                 </div>
 
                 {/* Time */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Orario Inizio</label>
-                  <div className="relative">
-                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input
-                      type="time"
-                      {...register('start_time', { required: true })}
-                      className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Orario Inizio</label>
+                    <div className="relative">
+                      <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input
+                        type="time"
+                        {...register('start_time', { required: true })}
+                        className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                     <div className="flex justify-between items-center mb-1">
+                        <label className="block text-sm font-medium text-slate-700">Parrucchiere</label>
+                        <button type="button" onClick={() => setIsStaffManagerOpen(true)} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                           <Settings size={12} /> Gestione
+                        </button>
+                     </div>
+                     <select 
+                        {...register('staff_id')}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500"
+                     >                        <option value="">-- Chiunque --</option>
+                        {staff.map(s => (
+                           <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                     </select>
                   </div>
                 </div>
 
@@ -375,7 +445,13 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                               const val = e.target.value;
                               if (val) {
                                   // Auto-add logic
-                                  setSelectedServices(prev => [...prev, { treatment: val }]);
+                                  // Default duration 30 unless found in treatments list
+                                  const tObj = treatments.find(t => t.name === val);
+                                  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                                  // @ts-ignore
+                                  const duration = tObj?.duration || 30;
+                                  
+                                  setSelectedServices(prev => [...prev, { treatment: val, duration }]);
                                   setCurrentTreatment(''); // Reset immediately
                               }
                            }}
@@ -392,8 +468,22 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                        {selectedServices.length > 0 ? (
                          <ul className="divide-y divide-slate-100">
                             {selectedServices.map((item, idx) => (
-                              <li key={idx} className="p-3 flex justify-between items-center text-sm">
-                                 <span className="font-medium text-slate-700">{item.treatment}</span>
+                              <li key={idx} className="p-3 flex items-center gap-3 text-sm">
+                                 <span className="font-medium text-slate-700 flex-1">{item.treatment}</span>
+                                 
+                                 <div className="flex items-center gap-1">
+                                    <span className="text-xs text-slate-500">Durata:</span>
+                                    <select 
+                                        value={item.duration || 30} 
+                                        onChange={(e) => updateDuration(idx, Number(e.target.value))}
+                                        className="border border-slate-200 rounded px-2 py-1 text-xs bg-slate-50"
+                                    >
+                                        {[15, 30, 45, 60, 75, 90, 105, 120, 150, 180].map(m => (
+                                            <option key={m} value={m}>{m} min</option>
+                                        ))}
+                                    </select>
+                                 </div>
+
                                  <button type="button" onClick={() => removeService(idx)} className="text-slate-400 hover:text-red-500">
                                      <Trash2 size={16} />
                                  </button>
@@ -402,10 +492,17 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                          </ul>
                        ) : (
                          <div className="p-6 text-center text-slate-400 text-sm italic">
-                           Nessun servizio aggiunto per questo appuntamento.
+                           Nessun servizio aggiunto. Seleziona dal menu sopra.
                          </div>
                        )}
                    </div>
+                   
+                   {/* Summary of total duration */}
+                   {selectedServices.length > 0 && (
+                      <div className="text-right text-xs text-slate-500">
+                         Totale stimato: {selectedServices.reduce((acc, curr) => acc + (curr.duration || 30), 0)} min
+                      </div>
+                   )}
                    {appointmentToEdit && (
                      <p className="text-xs text-slate-500 mt-2">
                         Puoi aggiungere nuovi trattamenti o rimuovere quelli esistenti.

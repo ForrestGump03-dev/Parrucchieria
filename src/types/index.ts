@@ -15,8 +15,20 @@ export interface Appointment {
   treatment: string;
   price: number | null;
   notes?: string;
+  // New fields for v2.1
+  staff_id?: string | null;
+  duration?: number; // minutes
   // Join fields
   clients?: Client;
+  staff_members?: StaffMember;
+}
+
+export interface StaffMember {
+  id: string;
+  user_id: string;
+  name: string;
+  color?: string;
+  active: boolean;
 }
 
 export type NotificationType = 'info' | 'warning' | 'success' | 'error' | 'backup';

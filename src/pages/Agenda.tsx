@@ -10,6 +10,7 @@ import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 
 import { useAppointments } from '../hooks/useAppointments';
 import { useClients } from '../hooks/useClients';
+import { useStaff } from '../hooks/useStaff';
 import AgendaModal from '../components/AgendaModal';
 import ConfirmModal from '../components/ConfirmModal';
 import DeleteClientToast from '../components/DeleteClientToast';
@@ -21,10 +22,9 @@ interface CalendarEvent {
   desc?: string;
   start: Date;
   end: Date;
+  resourceId?: string; 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   resource: any;
-  isCluster?: boolean;
-  events?: CalendarEvent[];
 }
 
 const locales = {
@@ -48,6 +48,8 @@ const parseDateTime = (dateStr: string, timeStr: string) => {
 export default function Agenda() {
   const { getAppointmentsForRange, updateAppointment, deleteAppointment } = useAppointments();
   const { deleteClient } = useClients();
+  const { staff, refreshStaff } = useStaff();
+
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [view, setView] = useState<View>(Views.DAY);
   const [date, setDate] = useState(new Date());
@@ -76,7 +78,24 @@ export default function Agenda() {
     clientName: string;
   }>({ isVisible: false, clientId: '', clientName: '' });
 
-  // Cluster Selection State
+  // Prepare Resources
+  const resources = staff.length > 0 
+     ? [
+         ...staff.filter(s => s.active).map(s => ({ id: s.id, title: s.name })), 
+       ]
+     : undefined;
+  
+  // If resources exist, we always add 'Unassigned' column if there are unassigned events?
+  // User wants Columns. If only 3 hairdressers, show 3 columns.
+  // If undefined, show Standard View.
+  if (resources && staff.length < 5) {
+      // Add empty columns? No, react-big-calendar doesn't do "empty" resources easily without dummy logic.
+  }
+  // Force "Non Assegnato" if we are using columns
+  if (resources) {
+      resources.push({ id: 'unassigned', title: 'Non Assegnato' });
+  }
+
   const [clusterData, setClusterData] = useState<{ isOpen: boolean; events: CalendarEvent[] }>({ isOpen: false, events: [] });
 
   const fetchEvents = useCallback(async () => {
@@ -88,16 +107,17 @@ export default function Agenda() {
 
     try {
       const data = await getAppointmentsForRange(start, end);
-      // Filter out completed/paid treatments (price is not null)
-      // Agenda should only show planned appointments
-      if (!data) return;
+      
+      // Even if data is empty, we must continue to clear events
+      const safeData = data || [];
 
-      const calendarEvents = data
+      const calendarEvents = safeData
         .filter((apt: Appointment) => apt.price === null)
         .map((apt: Appointment) => {
         const evtStart = parseDateTime(apt.date, apt.start_time || '00:00');
-        // Default 30 min duration for better visualization
-        const evtEnd = addMinutes(evtStart, 30);
+        // USE DURATION
+        const duration = apt.duration || 30;
+        const evtEnd = addMinutes(evtStart, duration);
         
         return {
           id: apt.id,
@@ -105,78 +125,37 @@ export default function Agenda() {
           desc: apt.treatment,
           start: evtStart,
           end: evtEnd,
+          resourceId: apt.staff_id || 'unassigned',
           resource: apt
         };
       });
       
-      // Group overlapping events to avoid ugly overlapping visual
-      const sortedEvents = calendarEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
-      const groupedEvents: CalendarEvent[] = [];
-      const MAX_CLUSTER_SPAN = 45 * 60 * 1000; // 45 minutes max grouping span
-      
-      for (const event of sortedEvents) {
-        const lastGroup = groupedEvents[groupedEvents.length - 1];
-        
-        // If overlap with last group (and same day) AND starts within reasonable time from group start
-        if (lastGroup && 
-            event.start < lastGroup.end && 
-            event.start.toDateString() === lastGroup.start.toDateString() &&
-            (event.start.getTime() - lastGroup.start.getTime() < MAX_CLUSTER_SPAN)
-        ) {
-           if (!lastGroup.events) lastGroup.events = [];
-           lastGroup.events.push(event);
-           // Extend group visual duration
-           if (event.end > lastGroup.end) lastGroup.end = event.end;
-        } else {
-           // Create new group (or single event wrapper)
-           groupedEvents.push({
-             ...event,
-             id: `group-${event.id}`,
-             isCluster: false, 
-             events: [event]
-           });
-        }
-      }
-      
-      // Finalize: Prevent overlapping clusters by clamping end time
-      for (let i = 0; i < groupedEvents.length - 1; i++) {
-        const current = groupedEvents[i];
-        const next = groupedEvents[i + 1];
-
-        // If current overlaps with next (and they are clusters or dense areas)
-        if (current.end > next.start && current.start < next.start) {
-           // Clamp current end to next start to force vertical stacking
-           current.end = next.start;
-        }
-      }
-
-      // Finalize structure: if > 1 event, it's a cluster
-      const processedEvents = groupedEvents.map(g => {
-        if (g.events && g.events.length > 1) {
-          return {
-            ...g,
-            title: `${g.events.length} Appuntamenti`,
-            isCluster: true,
-            resource: { isCluster: true, events: g.events }
-          };
-        }
-        return g.events ? g.events[0] : g; // Return original single event
-      });
-
-      setEvents(processedEvents);
+      setEvents(calendarEvents);
     } catch (e) {
       console.error(e);
+      toast.error('Impossibile aggiornare agenda');
     }
   }, [date, getAppointmentsForRange]);
 
+  // Handle focus re-fetch and initial load
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchEvents();
-    // Close context menu on click elsewhere
+    
+    // Auto-refresh when window regains focus (solves "minimize/restore" issue)
+    const onFocus = () => {
+       void fetchEvents();
+       void refreshStaff();
+    };
+    window.addEventListener('focus', onFocus);
+    
     const handleClick = () => setContextMenu(null);
     window.addEventListener('click', handleClick);
-    return () => window.removeEventListener('click', handleClick);
-  }, [fetchEvents]);
+    
+    return () => {
+       window.removeEventListener('click', handleClick);
+       window.removeEventListener('focus', onFocus);
+    };
+  }, [fetchEvents, refreshStaff]);
 
   const handleSelectSlot = ({ start }: { start: Date }) => {
     setSelectedDate(start);
@@ -300,16 +279,22 @@ export default function Agenda() {
     setIsModalOpen(true);
   };
 
-  const handleEventDrop = async ({ event, start }: { event: CalendarEvent, start: string | Date }) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleEventDrop = async ({ event, start, resourceId }: any) => {
     const startDate = new Date(start);
     // Aggiorna data e ora
     const dateStr = format(startDate, 'yyyy-MM-dd');
     const timeStr = format(startDate, 'HH:mm');
+    
+    const newStaffId = resourceId === 'unassigned' ? null : resourceId;
 
     try {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
       await updateAppointment(event.id, {
         date: dateStr,
-        start_time: timeStr
+        start_time: timeStr,
+        staff_id: newStaffId
       });
       fetchEvents();
       toast.success("Appuntamento spostato");
@@ -339,7 +324,10 @@ export default function Agenda() {
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 relative z-0">
         <DnDCalendar
           localizer={localizer}
-          events={events} // CalendarEvent[] is compatible
+          events={events}
+          resources={resources}
+          resourceIdAccessor={(r: any) => r.id}
+          resourceTitleAccessor={(r: any) => r.title}
           startAccessor="start"
           endAccessor="end"
           style={{ height: '100%', minHeight: '600px' }}
