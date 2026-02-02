@@ -158,6 +158,13 @@ export default function Agenda() {
   }, [fetchEvents, refreshStaff]);
 
   const handleSelectSlot = ({ start }: { start: Date }) => {
+    // Naviga alla vista giornaliera se siamo in vista mese
+    if (view === Views.MONTH) {
+       setDate(start);
+       setView(Views.DAY);
+       return;
+    }
+
     setSelectedDate(start);
     setEditingAppointment(null);
     setIsModalOpen(true);
