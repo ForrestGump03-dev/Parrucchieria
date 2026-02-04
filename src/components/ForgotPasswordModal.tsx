@@ -46,9 +46,10 @@ const onSendEmail = async (data: { email: string }) => {
     setEmail(cleanEmail);
     toast.success('Codice di recupero inviato!');
     setStep('token_and_password');
-  } catch (error: any) {
+  } catch (error) {
     console.error(error);
-    toast.error(error.message || 'Errore invio email.');
+    const message = error instanceof Error ? error.message : 'Errore invio email.';
+    toast.error(message);
   } finally {
     setLoading(false);
   }
@@ -77,9 +78,10 @@ const onSendEmail = async (data: { email: string }) => {
     toast.success('Password aggiornata con successo!');
     onClose();
     
-  } catch (error: any) {
+  } catch (error) {
     console.error("Errore:", error);
-    toast.error(error.message || 'Errore durante il reset.');
+    const message = error instanceof Error ? error.message : 'Errore durante il reset.';
+    toast.error(message);
   } finally {
     setLoading(false);
   }
