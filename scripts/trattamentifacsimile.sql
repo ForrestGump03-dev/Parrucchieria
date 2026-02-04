@@ -9,29 +9,30 @@ DECLARE
 BEGIN
     INSERT INTO treatments (name, user_id) VALUES 
     
-    -- Sezione 1: Taglio e Piega
+    
     ('Piega', target_user),
+    ('Piega Stylist', target_user),
     ('Taglio', target_user),
-    ('Taglio Uomo', target_user),
 
-    -- Sezione 2: Colore
+    
     ('Ritocco Colore', target_user),
     ('Colore Intero', target_user),
-    ('Ombreggiature', target_user),
+    ('Decolorazione', target_user),
     ('Tonalizzante', target_user),
+    
+    
+    ('Balayage', target_user),
+    ('Meches', target_user),
 
-    -- Sezione 3: Schiariture
-    ('Balayage Naturale', target_user),
-    ('Balayage Californiano', target_user),
+    
+    ('Riflessi', target_user),
+    ('Permanente', target_user),
+    ('Relax', target_user),
+    ('Trattamento Keratina', target_user),
 
-    -- Sezione 4: Cura e Trattamenti
-    ('Illumina Shampoo (Kerastase)', target_user),
-    ('Special Shampoo (L''Oreal S.E.)', target_user),
-    ('Trattamento Olaplex SPA', target_user),
-    ('Premier SPA', target_user),
-
-    -- Sezione 5: Forme
-    ('Permanente Riccio', target_user),
-    ('Permanente Waves', target_user);
+    
+    ('Shampoo Specifico', target_user),
+    ('Risrutturante', target_user);
+    ('Acconciature', target_user);
     
 END $$;
