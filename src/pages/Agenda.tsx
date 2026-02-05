@@ -27,6 +27,11 @@ interface CalendarEvent {
   resource: any;
 }
 
+interface Resource {
+  id: string;
+  title: string;
+}
+
 const locales = {
   'it': it,
 };
@@ -39,7 +44,7 @@ const localizer = dateFnsLocalizer({
   locales,
 });
 
-const DnDCalendar = withDragAndDrop<CalendarEvent>(Calendar);
+const DnDCalendar = withDragAndDrop<CalendarEvent, Resource>(Calendar);
 
 const parseDateTime = (dateStr: string, timeStr: string) => {
   return new Date(`${dateStr}T${timeStr}:00`);
@@ -160,7 +165,7 @@ export default function Agenda() {
 
   const [selectedResourceId, setSelectedResourceId] = useState<string | undefined>(undefined);
 
-  const handleSelectSlot = ({ start, resourceId }: { start: Date, resourceId?: string }) => {
+  const handleSelectSlot = ({ start, resourceId }: { start: Date, resourceId?: string | number }) => {
     // Naviga alla vista giornaliera se siamo in vista mese
     if (view === Views.MONTH) {
        setDate(start);
@@ -176,7 +181,7 @@ export default function Agenda() {
     
     // If the click is on "Non Assegnato" column (id='unassigned'), we want the select to show "Chiunque".
     // If the click is on a staff column, we want that staff.
-    setSelectedResourceId(resourceId === 'unassigned' ? undefined : resourceId);
+    setSelectedResourceId(resourceId === 'unassigned' ? undefined : String(resourceId));
     
     setEditingAppointment(null);
     setIsModalOpen(true);
@@ -345,8 +350,8 @@ export default function Agenda() {
           localizer={localizer}
           events={events}
           resources={resources}
-          resourceIdAccessor={(r: { id: string }) => r.id}
-          resourceTitleAccessor={(r: { title: string }) => r.title}
+          resourceIdAccessor={(r) => r.id}
+          resourceTitleAccessor={(r) => r.title}
           startAccessor="start"
           endAccessor="end"
           style={{ height: '100%', minHeight: '600px' }}
