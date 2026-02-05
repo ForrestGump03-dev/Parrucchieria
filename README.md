@@ -79,7 +79,7 @@ npm run electron:dev
 # Creazione pacchetto di distribuzione (.exe)
 
 npm run electron:pack
-``n
+
 ---
 
 *Developed by Alessio Forestieri*
