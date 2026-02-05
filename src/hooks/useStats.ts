@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { isSameDay, startOfMonth, endOfMonth, startOfYear, isWithinInterval, subDays, differenceInDays, parse, startOfDay } from 'date-fns';
+import { isSameDay, startOfMonth, endOfMonth, startOfYear, isWithinInterval, subDays, differenceInDays, parse, startOfDay, format } from 'date-fns';
+import { it } from 'date-fns/locale';
 
 export interface TreatmentStat {
   name: string;
@@ -14,6 +15,19 @@ export interface ClientStat {
   name: string;
   visits: number;
   spent: number;
+  lastVisit: string; // ISO date
+}
+
+export interface StaffStat {
+  name: string;
+  totalRevenue: number;
+  servicesCount: number;
+}
+
+export interface DayTrend {
+  date: string;
+  label: string;
+  value: number;
 }
 
 export interface KPIStats {
@@ -27,9 +41,13 @@ export interface KPIStats {
   previousPeriodRevenue: number;
   growth: number;
   totalVisits: number; // Unique visits in period
-  
+  averageTicket: number;
+
   topTreatments: TreatmentStat[];
   topClients: ClientStat[];
+  sleepingClients: ClientStat[];
+  staffStats: StaffStat[];
+  dailyTrend: DayTrend[];
 }
 
 export type DateRange = {
@@ -66,10 +84,11 @@ export function useStats() {
         .from('appointments')
         .select(`
             *,
-            clients (id, first_name, last_name)
+            clients (id, first_name, last_name),
+            staff_members (id, name)
         `)
         .not('price', 'is', null) 
-        .order('date', { ascending: false });
+        .order('date', { ascending: true });
 
       if (error) throw error;
       if (!data) return;
@@ -87,8 +106,18 @@ export function useStats() {
       
       const visitsSet = new Set<string>(); // "ClientID_Date" to count unique visits
       const treatmentMap = new Map<string, { count: number; total: number }>();
-      const clientMap = new Map<string, { name: string; visits: Set<string>; spent: number }>(); // Visits is Set of dates
+      const clientMap = new Map<string, { name: string; visits: Set<string>; spent: number; lastVisit: string }>(); // Visits is Set of dates
+      const allClientsMap = new Map<string, { name: string; lastVisit: string; spent: number; visits: number }>();
+      const staffMap = new Map<string, { name: string; rev: number; count: number }>();
+      const dayMap = new Map<string, number>();
 
+      // Init Day Map
+      for (let i = 0; i < dayDiff; i++) {
+        const d = new Date(currentRange.start);
+        d.setDate(d.getDate() + i);
+        const k = format(d, 'yyyy-MM-dd');
+        dayMap.set(k, 0);
+      }
 
       appointments.forEach(apt => {
         // Fix: Parse strictly as local date at midnight to match calendar days
@@ -98,11 +127,23 @@ export function useStats() {
         const price = Number(apt.price);
         const treatment = apt.treatment;
         const clientId = apt.client_id;
-
-        // ... rest of logic
-
-        const clientName = `${apt.clients?.first_name} ${apt.clients?.last_name}`;
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        const clientName = apt.clients ? `${apt.clients.first_name} ${apt.clients.last_name}` : 'Cliente Eliminato';
         const uniqueVisitKey = `${clientId}_${apt.date}`; // Unique per day per client
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        const staffName = apt.staff_members?.name || 'Non Assegnato';
+
+        // --- GLOBAL TRACKING (For Sleeping Clients) ---
+        if (!allClientsMap.has(clientId)) {
+           allClientsMap.set(clientId, { name: clientName, lastVisit: apt.date, spent: 0, visits: 0 });
+        }
+        const globalClient = allClientsMap.get(clientId)!;
+        // Since data is ordered by date ASC, the current apt is always >= stored lastVisit
+        globalClient.lastVisit = apt.date; 
+        globalClient.spent += price;
+        globalClient.visits += 1;
 
         // Global Buckets
         if (isSameDay(aptDate, today)) todayRev += price;
@@ -124,11 +165,23 @@ export function useStats() {
 
           // Clients in period
           if (!clientMap.has(clientId)) {
-             clientMap.set(clientId, { name: clientName, visits: new Set(), spent: 0 });
+             clientMap.set(clientId, { name: clientName, visits: new Set(), spent: 0, lastVisit: apt.date });
           }
           const cStats = clientMap.get(clientId)!;
           cStats.visits.add(apt.date); // Add date to set to count visits
           cStats.spent += price;
+          cStats.lastVisit = apt.date; // Upgrade last visit in period
+          
+          // Staff
+          if (!staffMap.has(staffName)) staffMap.set(staffName, { name: staffName, rev: 0, count: 0 });
+          const sStats = staffMap.get(staffName)!;
+          sStats.rev += price;
+          sStats.count += 1;
+
+          // Daily Trend
+          const dateKey = format(aptDate, 'yyyy-MM-dd');
+          const currentDayVal = dayMap.get(dateKey) || 0;
+          dayMap.set(dateKey, currentDayVal + price);
         }
 
         // Previous Period Analysis (for comparison)
@@ -146,6 +199,7 @@ export function useStats() {
       }
 
       const totalUniqueVisits = visitsSet.size;
+      const averageTicket = totalUniqueVisits > 0 ? periodRev / totalUniqueVisits : 0; // NEW
 
       // Top Treatments with Penetration
       const topTreatments = Array.from(treatmentMap.entries())
@@ -157,16 +211,51 @@ export function useStats() {
         }))
         .sort((a, b) => b.count - a.count); // Sort by popularity
 
-      // Top Clients
+      // Top Clients (Faithful)
       const topClients = Array.from(clientMap.entries())
         .map(([id, val]) => ({
           id,
           name: val.name,
           visits: val.visits.size,
-          spent: val.spent
+          spent: val.spent,
+          lastVisit: val.lastVisit
         }))
         .sort((a, b) => b.visits - a.visits)
         .slice(0, 10); // Top 10
+
+      // Sleeping Clients (Oldest Last Visit)
+      const sleepingClients = Array.from(allClientsMap.entries())
+        .map(([id, val]) => ({
+          id,
+          name: val.name,
+          visits: val.visits,
+          spent: val.spent,
+          lastVisit: val.lastVisit
+        }))
+        .sort((a, b) => new Date(a.lastVisit).getTime() - new Date(b.lastVisit).getTime()) // Oldest date first
+        .slice(0, 10);
+        
+      // NEW: Staff ranking
+      const staffStats = Array.from(staffMap.values())
+        .map(s => ({
+            name: s.name,
+            totalRevenue: s.rev,
+            servicesCount: s.count
+        }))
+        .sort((a,b) => b.totalRevenue - a.totalRevenue);
+
+      // NEW: Daily Data
+      const dailyTrend = Array.from(dayMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, val]) => {
+            const d = parse(date, 'yyyy-MM-dd', new Date());
+            return {
+                date,
+                label: format(d, 'eee dd', { locale: it }),
+                value: val
+            };
+        });
+
 
       setStats({
         todayRevenue: todayRev,
@@ -176,8 +265,12 @@ export function useStats() {
         previousPeriodRevenue: prevPeriodRev,
         growth,
         totalVisits: totalUniqueVisits,
+        averageTicket,
         topTreatments,
-        topClients
+        topClients,
+        sleepingClients,
+        staffStats,
+        dailyTrend
       });
 
     } catch (err) {

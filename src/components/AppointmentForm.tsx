@@ -42,7 +42,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
 
   const { user } = useAuth();
   const { addAppointment, getLastPriceForTreatment, getClientHistory, deleteAppointment, updateAppointment } = useAppointments();
-  const { getClientByPhone, updateClient } = useClients();
+  const { getClientByPhone, updateClient, findPotentialDuplicates } = useClients();
   const { treatments } = useTreatments();
   // const { staff } = useStaff(); // Unused for now in this form as requested to be simple? Or did I just forget to add the select?
   // Actually the user asked for "Agenda divided in 3 columns", and "Appointment Form" to have duration.
@@ -97,17 +97,30 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
     const val = e.target.value;
     setCurrentTreatment(val);
     if (val) {
-      // Find default price from treatment list first
+      // 1. Priorità allo storico: Cerchiamo l'ultimo prezzo usato per questo trattamento
+      const lastPrice = await getLastPriceForTreatment(val);
+      
+      // 2. Cerchiamo i dettagli standard (per la durata)
       const treatment = treatments.find(t => t.name === val);
-      if (treatment) {
+
+      if (lastPrice !== null) {
+          // Se esiste uno storico, usiamo quel prezzo
+          setCurrentPrice(lastPrice.toString());
+          
+          // Manteniamo la durata standard se disponibile, altrimenti 30
+          if (treatment && treatment.duration) {
+             setCurrentDuration(treatment.duration.toString());
+          } else {
+             setCurrentDuration('30');
+          }
+      } else if (treatment) {
+          // Fallback standard se non c'è storico
           if (treatment.price) setCurrentPrice(treatment.price.toString());
           if (treatment.duration) setCurrentDuration(treatment.duration.toString());
       } else {
-          // Fallback to history
-          const price = await getLastPriceForTreatment(val);
-          if (price !== null) {
-            setCurrentPrice(price.toString());
-          }
+          // Nessuna info trovata
+          setCurrentPrice('');
+          setCurrentDuration('30');
       }
     } else {
       setCurrentPrice('');
@@ -211,15 +224,33 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
       let clientId = selectedClient?.id;
 
       if (!clientId) {
-         const existing = await getClientByPhone(data.phone);
-         if (existing) {
-             const confirmLoad = confirm(`Attenzione: Il numero ${data.phone} è già associato a ${existing.first_name} ${existing.last_name}. Vuoi usare questo cliente esistente invece di crearne uno nuovo?`);
-             if (confirmLoad) {
-                if(onSelectExistingClient) {
-                    onSelectExistingClient(existing);
-                    toast.success(`Dati di ${existing.first_name} caricati! Riprova il salvataggio.`);
-                    setSubmitting(false);
-                    return;
+         // 1. Strict Phone Check
+         if (data.phone && data.phone.length > 5) {
+             const existing = await getClientByPhone(data.phone);
+             if (existing) {
+                 const confirmLoad = confirm(`Attenzione: Il numero ${data.phone} è già associato a ${existing.first_name} ${existing.last_name}. Vuoi usare questo cliente esistente invece di crearne uno nuovo?`);
+                 if (confirmLoad) {
+                    if(onSelectExistingClient) {
+                        onSelectExistingClient(existing);
+                        toast.success(`Dati di ${existing.first_name} caricati! Riprova il salvataggio.`);
+                        setSubmitting(false);
+                        return;
+                    }
+                 }
+             }
+         } else {
+             // 2. Soft Name Check
+             const possibleDupes = await findPotentialDuplicates(data.first_name, data.last_name);
+             if (possibleDupes.length > 0) {
+                const match = possibleDupes[0];
+                const confirmLoad = confirm(`Esiste già un cliente chiamato "${match.first_name} ${match.last_name}" (ma senza telefono o con telefono diverso). Vuoi usare quello esistente per evitare clonazioni?`);
+                if (confirmLoad) {
+                    if (onSelectExistingClient) {
+                       onSelectExistingClient(match);
+                       toast.success(`Dati caricati!`);
+                       setSubmitting(false);
+                       return;
+                    }
                 }
              }
          }
@@ -233,7 +264,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
          const { data: newClient, error } = await supabase.from('clients').insert([{
              first_name: data.first_name,
              last_name: data.last_name,
-             phone: data.phone,
+             phone: data.phone || '', // Check valid value
              user_id: user.id
          }]).select().single();
          
@@ -420,14 +451,14 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Telefono</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Telefono (Opzionale)</label>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input
                   {...register('phone', { 
-                    required: true,
+                    required: false,
                     pattern: {
-                      value: /^[0-9+]+$/,
+                      value: /^[0-9+]*$/,
                       message: "Solo numeri e '+' sono consentiti"
                     },
                     onChange: (e) => {
@@ -436,7 +467,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                     }
                   })}
                   className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
-                  placeholder="Numero di telefono"
+                  placeholder="Se disponibile..."
                   readOnly={Boolean(selectedClient && !isEditingClient)}
                 />
               </div>

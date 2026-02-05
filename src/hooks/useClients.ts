@@ -89,5 +89,15 @@ export function useClients() {
      return data;
   }, []);
 
-  return { clients, loading, error, fetchClients, addClient, updateClient, deleteClient, getClientByPhone };
+  const findPotentialDuplicates = useCallback(async (firstName: string, lastName: string) => {
+    const { data } = await supabase
+      .from('clients')
+      .select('*')
+      .ilike('first_name', firstName.trim())
+      .ilike('last_name', lastName.trim());
+    
+    return data || [];
+  }, []);
+
+  return { clients, loading, error, fetchClients, addClient, updateClient, deleteClient, getClientByPhone, findPotentialDuplicates };
 }

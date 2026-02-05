@@ -1,21 +1,138 @@
 import { useEffect, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { useStats, type DateRange } from '../hooks/useStats';
-import { TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard, Award, UserCheck, Filter, ArrowRight, Database, Download } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard, Award, UserCheck, UserMinus, Filter, ArrowRight, Database, Download, Users, BarChart as BarChartIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, parse, startOfDay, endOfDay, isValid } from 'date-fns';
-import { it } from 'date-fns/locale';
 import { supabase } from '../lib/supabase';
 import { exportToCsv } from '../lib/utils';
 import ConfirmModal from '../components/ConfirmModal';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Cell
+} from 'recharts';
 
 export default function Reports() {
+  const { user } = useAuth();
   const { stats, loading, fetchStats } = useStats();
+
+  const seedPenetrationTest = async () => {
+    if (!user) return toast.error("Devi essere loggato");
+    if (!confirm("⚠️ Attenzione: Questo genererà 100 clienti e appuntamenti di test per OGGI. Vuoi procedere?")) return;
+    
+    const toastId = toast.loading("Generazione dati test...");
+    try {
+      // 1. Genera dati clienti
+      const prefix = "TestRep";
+      const targetPhones: string[] = [];
+      const clientsBatch = Array.from({ length: 100 }).map((_, i) => {
+        const phone = `555${String(i).padStart(7, '0')}`;
+        targetPhones.push(phone);
+        return {
+          first_name: prefix,
+          last_name: `User${i}`,
+          phone: phone,
+          user_id: user.id
+        };
+      });
+
+      // 2. Trova clienti esistenti (evita upsert con onConflict che richiede constraint unique)
+      const { data: existingClients, error: fetchError } = await supabase
+        .from('clients')
+        .select('id, phone')
+        .in('phone', targetPhones);
+        
+      if (fetchError) throw fetchError;
+
+      const existingPhoneSet = new Set(existingClients?.map(c => c.phone));
+      const newClients = clientsBatch.filter(c => !existingPhoneSet.has(c.phone));
+      
+      let finalClients: { id: string; }[] = existingClients || [];
+
+      // 3. Inserisci nuovi clienti se necessario
+      if (newClients.length > 0) {
+        const { data: insertedClients, error: insertError } = await supabase
+          .from('clients')
+          .insert(newClients)
+          .select('id, phone');
+
+        if (insertError) throw insertError;
+        if (insertedClients) {
+          finalClients = [...finalClients, ...insertedClients];
+        }
+      }
+
+      if (finalClients.length === 0) throw new Error("Impossibile recuperare clienti di test");
+
+      const today = new Date().toISOString().split('T')[0];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const appointments: any[] = [];
+
+      // Use real treatments found in the constants/app
+      const T_100 = "Taglio"; // 100%
+      const T_50 = "Special Shampoo (L'Oreal S.E.)"; // ~50%
+      const T_20 = "Tonalizzante"; // ~20%
+
+      finalClients.forEach(client => {
+         // A: Common Treatment (100%) -> Tutti i clienti fanno questo
+         appointments.push({
+           client_id: client.id,
+           date: today,
+           treatment: T_100,
+           price: 25,
+           user_id: user.id
+         });
+
+         // B: ~50% Treatment -> Metà dei clienti fa anche questo
+         if (Math.random() < 0.5) {
+            appointments.push({
+               client_id: client.id,
+               date: today,
+               treatment: T_50,
+               price: 15,
+               user_id: user.id
+            });
+         }
+         
+         // C: ~20% Treatment -> Pochi clienti fanno questo
+         if (Math.random() < 0.2) {
+             appointments.push({
+               client_id: client.id,
+               date: today,
+               treatment: T_20,
+               price: 45,
+               user_id: user.id
+            });
+         }
+      });
+
+      const { error: aptError } = await supabase.from('appointments').insert(appointments);
+      if (aptError) throw aptError;
+
+      toast.success("Dati test inseriti!", { id: toastId });
+      fetchStats(selectedRange); 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      console.error(error);
+      toast.error(`Errore seed: ${error.message || 'Unknown'}`, { id: toastId });
+    }
+  };
+
   const [selectedRange, setSelectedRange] = useState<DateRange>({
     start: startOfMonth(new Date()),
     end: endOfMonth(new Date()),
     label: 'Questo Mese'
   });
 
+  const [clientViewMode, setClientViewMode] = useState<'faith' | 'sleep'>('faith');
   const [showCustomPicker, setShowCustomPicker] = useState(false);
   const [customDates, setCustomDates] = useState({
     start: format(new Date(), 'yyyy-MM-dd'),
@@ -101,7 +218,15 @@ export default function Reports() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
              <h1 className="text-2xl font-bold text-slate-800">Analisi Finanziaria</h1>
-             <p className="text-slate-500 text-sm">Panoramica completa dell'andamento del salone</p>
+             <p className="text-slate-500 text-sm">Monitora le performance del tuo salone</p>
+             {import.meta.env.DEV && (
+                <button 
+                  onClick={seedPenetrationTest}
+                  className="mt-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded border border-amber-200 hover:bg-amber-200"
+                >
+                  🛠️ Seed Test (100 Clienti)
+                </button>
+             )}
           </div>
           
           <div className="flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm overflow-x-auto">
@@ -163,12 +288,18 @@ export default function Reports() {
         )}
       </div>
 
-      {/* FIXED CARDS - Always visible global stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* KPI GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
             <div>
-               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Incasso Oggi</p>
-               <h3 className="text-2xl font-bold text-slate-800 mt-1">€ {stats?.todayRevenue.toFixed(2)}</h3>
+               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Incasso Periodo</p>
+               <h3 className="text-2xl font-bold text-slate-800 mt-1">€ {stats?.periodRevenue.toFixed(2)}</h3>
+               {stats && (
+                 <div className={`flex items-center gap-1 text-xs font-medium mt-1 ${stats.growth >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                   {stats.growth >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                   <span>{Math.abs(stats.growth) > 999 ? '> 999%' : `${Math.abs(stats.growth).toFixed(1)}%`} vs prec.</span>
+                 </div>
+               )}
             </div>
             <div className="p-3 bg-indigo-50 rounded-full text-indigo-600">
                <DollarSign size={20} />
@@ -177,71 +308,131 @@ export default function Reports() {
         
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
             <div>
-               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mese Corrente</p>
-               <h3 className="text-2xl font-bold text-slate-800 mt-1">€ {stats?.monthRevenue.toFixed(2)}</h3>
+               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Visite Totali</p>
+               <h3 className="text-2xl font-bold text-slate-800 mt-1">{stats?.totalVisits}</h3>
             </div>
-            <div className="p-3 bg-emerald-50 rounded-full text-emerald-600">
-               <Calendar size={20} />
+            <div className="p-3 bg-blue-50 rounded-full text-blue-600">
+               <Users size={20} />
             </div>
         </div>
 
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
             <div>
-               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Anno Corrente</p>
-               <h3 className="text-2xl font-bold text-slate-800 mt-1">€ {stats?.yearRevenue.toFixed(2)}</h3>
+               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Scontrino Medio</p>
+               <h3 className="text-2xl font-bold text-slate-800 mt-1">€ {stats?.averageTicket.toFixed(2)}</h3>
+            </div>
+            <div className="p-3 bg-emerald-50 rounded-full text-emerald-600">
+               <CreditCard size={20} />
+            </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+            <div>
+               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Incasso Anno</p>
+               <h3 className="text-2xl font-bold text-slate-800 mt-1">€ {stats?.yearRevenue.toFixed(0)}</h3>
             </div>
             <div className="p-3 bg-amber-50 rounded-full text-amber-600">
-               <CreditCard size={20} />
+               <Calendar size={20} />
             </div>
         </div>
       </div>
 
-      {/* DYNAMIC ANALYSIS SECTION */}
-      <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xl">
-         <div className="flex justify-between items-start mb-6">
-            <div>
-               <h2 className="text-xl font-bold flex items-center gap-2">
-                 <Filter className="text-indigo-400" size={24} />
-                 Analisi: {selectedRange.label}
-               </h2>
-               <p className="text-slate-400 text-sm mt-1">
-                 Dal {format(selectedRange.start, 'dd MMM', { locale: it })} al {format(selectedRange.end, 'dd MMM yyyy', { locale: it })}
-               </p>
-            </div>
-            
-            <div className="text-right">
-               <div className="text-3xl font-bold">€ {stats?.periodRevenue.toFixed(2)}</div>
-               {stats && (
-                 <div className={`flex items-center justify-end gap-1 text-sm font-medium ${stats.growth >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                   {stats.growth >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-                   {Math.abs(stats.growth) > 999 
-                      ? '> 999%' 
-                      : `${Math.abs(stats.growth).toFixed(1)}%`
-                   } vs periodo prec.
-                 </div>
-               )}
-            </div>
-         </div>
-         
-         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Top Treatments */}
-            <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700">
-               <h3 className="text-indigo-300 font-semibold mb-4 flex items-center gap-2">
-                 <Award size={18} />
-                 Servizi più richiesti
-                 <span className="text-xs font-normal text-slate-500 ml-auto">({stats?.totalVisits} visite uniche)</span>
+      {/* CHARTS SECTION */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Chart: Daily Trend */}
+          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+                  <BarChartIcon className="text-indigo-500" size={20} />
+                  Andamento Giornaliero
+              </h3>
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={stats?.dailyTrend || []}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                        <XAxis 
+                            dataKey="label" 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{fontSize: 12, fill: '#64748B'}} 
+                            tickMargin={10}
+                            minTickGap={30}
+                        />
+                        <YAxis 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{fontSize: 12, fill: '#64748B'}} 
+                            tickFormatter={(value) => `€${value}`}
+                        />
+                        <Tooltip 
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            formatter={(value: any) => [`€ ${Number(value).toFixed(2)}`, 'Incasso']}
+                        />
+                        <Line 
+                            type="monotone" 
+                            dataKey="value" 
+                            stroke="#6366f1" 
+                            strokeWidth={3} 
+                            dot={{ fill: '#6366f1', strokeWidth: 2 }} 
+                            activeDot={{ r: 6 }}
+                        />
+                    </LineChart>
+                </ResponsiveContainer>
+              </div>
+          </div>
+
+          {/* Staff Ranking */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+                  <Award className="text-amber-500" size={20} />
+                  Top Staff
+              </h3>
+              <div className="h-[300px] w-full">
+                 <ResponsiveContainer width="100%" height="100%">
+                    <BarChart layout="vertical" data={stats?.staffStats?.slice(0,5) || []} margin={{ left: 0, right: 30 }}>
+                        <XAxis type="number" hide />
+                        <YAxis 
+                           dataKey="name" 
+                           type="category" 
+                           axisLine={false} 
+                           tickLine={false}
+                           width={80}
+                           tick={{fontSize: 12, fill: '#64748B'}} 
+                        />
+                        <Tooltip 
+                            cursor={{fill: '#F1F5F9'}} 
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            formatter={(value: any) => [`€ ${Number(value).toFixed(2)}`, 'Generato']}
+                        />
+                        <Bar dataKey="totalRevenue" radius={[0, 4, 4, 0]} barSize={20}>
+                            {stats?.staffStats?.map((_, index) => (
+                                <Cell key={`cell-${index}`} fill={index === 0 ? '#10B981' : '#6366f1'} />
+                            ))}
+                        </Bar>
+                    </BarChart>
+                 </ResponsiveContainer>
+              </div>
+          </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Top Treatments Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+               <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+                 <Filter className="text-indigo-500" size={20} />
+                 Trattamenti Top
                </h3>
                
                <div className="space-y-4">
                   {stats?.topTreatments.slice(0, 5).map((t, i) => (
                     <div key={t.name} className="relative">
                        <div className="flex justify-between items-end mb-1 text-sm">
-                          <span className="font-medium text-slate-200">{i+1}. {t.name}</span>
-                          <span className="text-slate-300">{t.count} esecuzioni</span>
+                          <span className="font-medium text-slate-700">{i+1}. {t.name}</span>
+                          <span className="text-slate-500">{t.count} esecuzioni</span>
                        </div>
                        
-                       {/* Progress Bar Container */}
-                       <div className="w-full bg-slate-700 rounded-full h-2 mb-1">
+                       <div className="w-full bg-slate-100 rounded-full h-2 mb-1">
                           <div 
                              className="bg-indigo-500 h-2 rounded-full transition-all duration-500"
                              style={{ width: `${Math.min(t.penetration, 100)}%` }}
@@ -249,59 +440,95 @@ export default function Reports() {
                        </div>
                        
                        <div className="flex justify-between text-xs">
-                          <span className="text-emerald-400 font-medium">{t.penetration.toFixed(1)}% delle visite</span>
-                          <span className="text-slate-500">Tot € {t.totalRevenue.toFixed(0)}</span>
+                          <span className="text-indigo-600 font-medium">{t.penetration.toFixed(1)}% delle visite</span>
+                          <span className="text-slate-500 font-medium">Tot € {t.totalRevenue.toFixed(0)}</span>
                        </div>
                     </div>
                   ))}
                   {(!stats?.topTreatments || stats.topTreatments.length === 0) && (
-                     <div className="text-center text-slate-500 py-4">Nessun dato nel periodo</div>
+                     <div className="text-center text-slate-400 py-8">Nessun dato nel periodo</div>
                   )}
                </div>
             </div>
 
-            {/* Top Clients */}
-            <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700">
-               <h3 className="text-emerald-400 font-semibold mb-4 flex items-center gap-2">
-                 <UserCheck size={18} />
-                 Clienti Top (per frequenza)
-               </h3>
+            {/* Top Clients Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+               <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    {clientViewMode === 'faith' ? (
+                       <><UserCheck className="text-emerald-500" size={20} /> Clienti Fedeli</>
+                    ) : (
+                       <><UserMinus className="text-amber-500" size={20} /> Clienti Dormienti</>
+                    )}
+                  </h3>
+                  <div className="flex bg-slate-100 p-1 rounded-lg">
+                      <button 
+                        onClick={() => setClientViewMode('faith')}
+                        className={`p-1 rounded ${clientViewMode === 'faith' ? 'bg-white shadow text-emerald-600' : 'text-slate-400 hover:text-slate-600'}`}
+                        title="Clienti Fedeli"
+                      >
+                         <UserCheck size={16} />
+                      </button>
+                      <button 
+                        onClick={() => setClientViewMode('sleep')}
+                        className={`p-1 rounded ${clientViewMode === 'sleep' ? 'bg-white shadow text-amber-600' : 'text-slate-400 hover:text-slate-600'}`}
+                        title="Clienti Dormienti"
+                      >
+                         <UserMinus size={16} />
+                      </button>
+                  </div>
+               </div>
                
                <div className="space-y-3">
-                  {stats?.topClients.slice(0, 5).map((c, i) => (
-                    <div key={c.id} className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg hover:bg-slate-700/50 transition-colors">
+                  {(clientViewMode === 'faith' ? stats?.topClients : stats?.sleepingClients)?.slice(0, 5).map((c, i) => (
+                    <div key={c.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors border border-slate-100">
                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold
-                             ${i === 0 ? 'bg-yellow-500/20 text-yellow-500' : 'bg-slate-600 text-slate-300'}
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow-sm
+                             ${i === 0 ? 'bg-amber-100 text-amber-600' : 'bg-white text-slate-500 border border-slate-200'}
                           `}>
                              {c.name.substring(0, 2).toUpperCase()}
                           </div>
                           <div>
-                             <div className="text-sm font-medium text-slate-200">{c.name}</div>
-                             <div className="text-xs text-slate-500">Cliente</div>
+                             <div className="text-sm font-bold text-slate-700">{c.name}</div>
+                             <div className="text-xs text-slate-500">
+                                {clientViewMode === 'sleep' ? 'Assente dal:' : 'Cliente'}
+                             </div>
                           </div>
                        </div>
                        <div className="text-right">
-                          <div className="text-sm font-bold text-white">{c.visits} Visite</div>
-                          <div className="text-xs text-slate-400">€ {c.spent.toFixed(2)}</div>
+                          <div className="text-sm font-bold text-slate-800">
+                             {clientViewMode === 'sleep' 
+                                ? `${c.visits} in totale` 
+                                : `${c.visits} Visite`
+                             }
+                          </div>
+                          <div className="text-xs text-slate-500">
+                             {clientViewMode === 'sleep' 
+                                ? format(new Date(c.lastVisit), 'dd/MM/yyyy')
+                                : `€ ${c.spent.toFixed(2)}`
+                             }
+                          </div>
                        </div>
                     </div>
                   ))}
-                  {(!stats?.topClients || stats.topClients.length === 0) && (
-                     <div className="text-center text-slate-500 py-4">Nessun dato nel periodo</div>
+                  {((clientViewMode === 'faith' ? (!stats?.topClients || stats.topClients.length === 0) : (!stats?.sleepingClients || stats.sleepingClients.length === 0))) && (
+                     <div className="text-center text-slate-400 py-8">Nessun dato disponibile</div>
                   )}
                </div>
             </div>
-         </div>
       </div>
       
       {/* EXPORT SECTION */}
-      <BackupSection />
+      <BackupSection range={selectedRange} />
     </div>
   );
 }
 
-function BackupSection() {
+interface BackupSectionProps {
+  range: DateRange;
+}
+
+function BackupSection({ range }: BackupSectionProps) {
     const [loading, setLoading] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
 
@@ -312,8 +539,43 @@ function BackupSection() {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error("Utente non autenticato");
+            
+            let filesCount = 0;
+            const dateStr = format(new Date(), 'yyyy-MM-dd_HH-mm');
 
-            // 1. Export Clients
+            // --- 1. USER REPORT (Clean Data for selected range) ---
+            // Fetch appointments for the specific range used in Analysis
+            const { data: reportData, error: reportError } = await supabase
+                .from('appointments')
+                .select('date, start_time, treatment, price, notes, clients(first_name, last_name), staff_members(name)')
+                .gte('date', range.start.toISOString())
+                .lte('date', range.end.toISOString())
+                .not('price', 'is', null) // Only paid
+                .order('date', { ascending: false });
+            
+            if (reportError) throw reportError;
+
+            if (reportData && reportData.length > 0) {
+                // Flatten and Translate headers for User
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const userReport = reportData.map((a: any) => ({
+                    'Data': a.date,
+                    'Ora': a.start_time ? a.start_time.slice(0, 5) : '',
+                    'Cliente': a.clients ? `${a.clients.first_name} ${a.clients.last_name}` : 'Cliente Eliminato',
+                    'Staff': a.staff_members ? a.staff_members.name : '',
+                    'Trattamento': a.treatment,
+                    'Prezzo': a.price,
+                    'Note': a.notes || ''
+                }));
+                
+                // Clean label e.g. "Questa Settimana" -> "Questa_Settimana"
+                const rangeLabelFormatted = range.label.replace(/\s+/g, '_');
+                if(exportToCsv(`Report_Vendite_${rangeLabelFormatted}_${dateStr}.csv`, userReport)) filesCount++;
+            }
+
+            // --- 2. TECHNICAL BACKUP (Full Dump) ---
+            
+            // Clients
             const { data: clients, error: clientError } = await supabase
                 .from('clients')
                 .select('*')
@@ -321,21 +583,17 @@ function BackupSection() {
             
             if (clientError) throw clientError;
 
-            // 2. Export Appointments
+            // Full History
             const { data: appointments, error: apptError } = await supabase
                 .from('appointments')
                 .select('*, clients(first_name, last_name)')
-                .eq('user_id', user.id) // Ensure RLS policy compliance
+                .eq('user_id', user.id) 
                 .order('date', { ascending: false });
 
             if (apptError) throw apptError;
-
-            // 3. Generate CSVs
-            const dateStr = format(new Date(), 'yyyy-MM-dd');
-            let exportedCount = 0;
             
             if (clients && clients.length > 0) {
-                 if(exportToCsv(`backup_clienti_${dateStr}.csv`, clients)) exportedCount++;
+                 if(exportToCsv(`BACKUP_TECNICO_Clienti_${dateStr}.csv`, clients)) filesCount++;
             }
             
             if (appointments && appointments.length > 0) {
@@ -343,7 +601,7 @@ function BackupSection() {
                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                  const flatAppts = appointments.map((a: any) => ({
                      id: a.id,
-                     client_id: a.client_id, // Critical for restoration
+                     client_id: a.client_id, 
                      date: a.date,
                      start_time: a.start_time,
                      client_name: a.clients ? `${a.clients.first_name} ${a.clients.last_name}` : 'Eliminato',
@@ -353,12 +611,11 @@ function BackupSection() {
                      created_at: a.created_at,
                      user_id: a.user_id
                  }));
-                 if(exportToCsv(`backup_storico_${dateStr}.csv`, flatAppts)) exportedCount++;
+                 if(exportToCsv(`BACKUP_TECNICO_Storico_${dateStr}.csv`, flatAppts)) filesCount++;
             }
 
-            if (exportedCount > 0) {
-                 toast.success(`Backup completato! Scaricati ${exportedCount} file.`);
-                 // Save last backup date
+            if (filesCount > 0) {
+                 toast.success(`Download completato! ${filesCount} file scaricati.`);
                  localStorage.setItem('lastBackup', Date.now().toString());
             } else {
                  toast("Nessun dato trovato da esportare.", { icon: 'ℹ️' });
@@ -386,9 +643,11 @@ function BackupSection() {
                         <Database size={24} />
                     </div>
                     <div>
-                        <h3 className="text-lg font-bold text-slate-800">Centro di Sicurezza Dati</h3>
+                        <h3 className="text-lg font-bold text-slate-800">Centro di Sicurezza Dati & Report</h3>
                         <p className="text-slate-600 text-sm max-w-xl mt-1">
-                            Poichè questa versione utilizza il cloud base, è consigliabile scaricare periodicamente una copia dei propri dati sul computer. Puoi aprire questi file con Excel.
+                            Scarica i tuoi dati in formato Excel. Il download include:<br/> 
+                            1. <b>Report Analisi</b> (Dati dell'intervallo selezionato sopra)<br/>
+                            2. <b>Backup Tecnico</b> (Copia completa per ripristino o sviluppatore)
                         </p>
                         
                     </div>
@@ -400,15 +659,15 @@ function BackupSection() {
                   className="whitespace-nowrap flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-md transition-all disabled:opacity-70"
                 >
                     {loading ? <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <Download size={20} />}
-                    Scarica Backup Completo
+                    Scarica Report & Backup
                 </button>
             </div>
 
             <ConfirmModal 
                 isOpen={showConfirm}
-                title="Conferma Backup"
-                message="Vuoi davvero scaricare una copia completa di tutti i dati (Clienti, Appuntamenti, Storico)? Questa operazione genererà dei file CSV."
-                confirmText="Sì, scarica dati"
+                title="Download Completo"
+                message={`Stai per scaricare i dati per il periodo: ${range.label}. Verranno generati 3 file (Report Vendite + Backup Tecnico completo). Procedere?`}
+                confirmText="Sì, scarica tutto"
                 cancelText="Annulla"
                 onConfirm={performBackup}
                 onCancel={() => setShowConfirm(false)}

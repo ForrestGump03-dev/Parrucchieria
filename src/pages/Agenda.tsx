@@ -139,6 +139,7 @@ export default function Agenda() {
 
   // Handle focus re-fetch and initial load
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchEvents();
     
     // Auto-refresh when window regains focus (solves "minimize/restore" issue)
@@ -157,7 +158,9 @@ export default function Agenda() {
     };
   }, [fetchEvents, refreshStaff]);
 
-  const handleSelectSlot = ({ start }: { start: Date }) => {
+  const [selectedResourceId, setSelectedResourceId] = useState<string | undefined>(undefined);
+
+  const handleSelectSlot = ({ start, resourceId }: { start: Date, resourceId?: string }) => {
     // Naviga alla vista giornaliera se siamo in vista mese
     if (view === Views.MONTH) {
        setDate(start);
@@ -166,6 +169,15 @@ export default function Agenda() {
     }
 
     setSelectedDate(start);
+    // If resourceId is "unassigned" (string), we treat it as undefined/null for the form
+    // or keep it as "unassigned" and handle it in the modal.
+    // The AgendaModal form takes string or undefined.
+    // The select box has <option value="">-- Chiunque --</option> which maps to falsy.
+    
+    // If the click is on "Non Assegnato" column (id='unassigned'), we want the select to show "Chiunque".
+    // If the click is on a staff column, we want that staff.
+    setSelectedResourceId(resourceId === 'unassigned' ? undefined : resourceId);
+    
     setEditingAppointment(null);
     setIsModalOpen(true);
   };
@@ -333,8 +345,8 @@ export default function Agenda() {
           localizer={localizer}
           events={events}
           resources={resources}
-          resourceIdAccessor={(r: any) => r.id}
-          resourceTitleAccessor={(r: any) => r.title}
+          resourceIdAccessor={(r: { id: string }) => r.id}
+          resourceTitleAccessor={(r: { title: string }) => r.title}
           startAccessor="start"
           endAccessor="end"
           style={{ height: '100%', minHeight: '600px' }}
@@ -357,6 +369,7 @@ export default function Agenda() {
           onSelectEvent={handleSelectEvent}
           onEventDrop={handleEventDrop}
           resizable={false}
+          dayLayoutAlgorithm="no-overlap"
           dayPropGetter={dayPropGetter}
           components={{
             event: EventComponent
@@ -402,6 +415,7 @@ export default function Agenda() {
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)}
         initialDate={selectedDate}
+        initialStaffId={selectedResourceId}
         appointmentToEdit={editingAppointment}
         onSaved={fetchEvents}
         onDeleteRequest={(clientId, clientName) => {

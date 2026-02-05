@@ -17,6 +17,7 @@ interface AgendaModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialDate: Date | null;
+  initialStaffId?: string;
   appointmentToEdit?: Appointment | null;
   onSaved: () => void;
   onDeleteRequest?: (clientId: string, clientName: string) => void;
@@ -39,8 +40,8 @@ interface ServiceItem {
   duration: number;
 }
 
-export default function AgendaModal({ isOpen, onClose, initialDate, appointmentToEdit, onSaved, onDeleteRequest }: AgendaModalProps) {
-  const { clients, addClient, fetchClients, getClientByPhone } = useClients(); 
+export default function AgendaModal({ isOpen, onClose, initialDate, initialStaffId, appointmentToEdit, onSaved, onDeleteRequest }: AgendaModalProps) {
+  const { clients, addClient, fetchClients, getClientByPhone, findPotentialDuplicates } = useClients(); 
   const { addAppointment, updateAppointment, getClientAppointmentsByTime, deleteAppointment } = useAppointments();
   const { treatments } = useTreatments();
   const { staff } = useStaff();
@@ -105,9 +106,12 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
           const minutes = initialDate.getMinutes().toString().padStart(2, '0');
           setValue('start_time', `${hours}:${minutes}`);
         }
+        
+        // Auto-select staff based on column clicked
+        setValue('staff_id', initialStaffId || '');
       }
     }
-  }, [isOpen, initialDate, appointmentToEdit, setValue, reset, resetNewClient, getClientAppointmentsByTime]);
+  }, [isOpen, initialDate, initialStaffId, appointmentToEdit, setValue, reset, resetNewClient, getClientAppointmentsByTime]);
 
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client);
@@ -162,16 +166,31 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
   const onNewClientSubmit = async (data: NewClientFormData) => {
     setSubmitting(true);
     try {
-      // Check for duplicate
-      const existing = await getClientByPhone(data.phone);
-      if (existing) {
-        toast.error(`Cliente già esistente: ${existing.first_name} ${existing.last_name}`);
-        const userWantsToUseExisting = confirm(`Il numero ${data.phone} è già associato a ${existing.first_name} ${existing.last_name}. Vuoi usare questo cliente esistente?`);
-        if (userWantsToUseExisting) {
-           setSelectedClient(existing);
-           setStep('details');
-           setSubmitting(false);
-           return;
+      // 1. Strict Duplicate Check (Phone)
+      if (data.phone && data.phone.length > 5) {
+        const existing = await getClientByPhone(data.phone);
+        if (existing) {
+          toast.error(`Cliente già esistente: ${existing.first_name} ${existing.last_name}`);
+          const userWantsToUseExisting = confirm(`Il numero ${data.phone} è già associato a ${existing.first_name} ${existing.last_name}. Vuoi usare questo cliente esistente?`);
+          if (userWantsToUseExisting) {
+            setSelectedClient(existing);
+            setStep('details');
+            setSubmitting(false);
+            return;
+          }
+        }
+      } else {
+        // 2. Soft Duplicate Check (Name)
+        const possibleDupes = await findPotentialDuplicates(data.first_name, data.last_name);
+        if (possibleDupes.length > 0) {
+           const match = possibleDupes[0];
+           const useExisting = confirm(`Esiste già un cliente chiamato "${match.first_name} ${match.last_name}" (ma senza telefono o con telefono diverso). Vuoi usare quello esistente per evitare clonazioni?`);
+           if (useExisting) {
+              setSelectedClient(match);
+              setStep('details');
+              setSubmitting(false);
+              return;
+           }
         }
       }
 
@@ -354,12 +373,12 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Telefono *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Telefono (Opzionale)</label>
                   <input
                     {...registerNewClient('phone', { 
-                      required: true,
+                      required: false,
                       pattern: {
-                        value: /^[0-9+]+$/,
+                        value: /^[0-9+]*$/,
                         message: "Solo numeri e '+' sono consentiti"
                       },
                       onChange: (e) => {
@@ -367,6 +386,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, appointmentT
                         setValueNewClient('phone', clean); 
                       }
                     })}
+                    placeholder="Se disponibile..."
                     className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>

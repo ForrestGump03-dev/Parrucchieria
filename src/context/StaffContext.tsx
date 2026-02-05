@@ -113,6 +113,7 @@ export function StaffProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useStaff() {
   const context = useContext(StaffContext);
   if (context === undefined) {

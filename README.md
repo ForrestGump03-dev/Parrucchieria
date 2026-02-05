@@ -1,10 +1,16 @@
-# Root Salon Manager v2.0.0
+# Root Salon Manager v2.5
 
 Il compagno digitale essenziale per la gestione moderna del tuo salone.
 
-![Root Salon Manager](https://img.shields.io/badge/Versione-2.0.0-indigo) ![Status](https://img.shields.io/badge/Status-Stable-success) ![Platform](https://img.shields.io/badge/Platform-Windows-blue)
+![Root Salon Manager](https://img.shields.io/badge/Versione-2.5-indigo) ![Status](https://img.shields.io/badge/Status-Stable-success) ![Platform](https://img.shields.io/badge/Platform-Windows-blue)
 
-## 🌟 Novità della Versione 2.0 (Major Release)
+## 🌟 Novità della Versione 2.5
+
+### 📊 Intelligence Avanzata
+- **Clienti Dormienti**: Nuova visualizzazione dedicata per identificare i clienti che non tornano da tempo, con data ultima visita in evidenza.
+- **Top Staff**: Classifica dello staff basata sul fatturato generato e numero servizi eseguiti.
+- **Micro-Statistiche Realistiche**: Algoritmo di calcolo della penetrazione trattamenti affinato (basato su visite uniche reali).
+- **Tool Sviluppo**: Seed Test Penetration integrato per generare rapidamente dati di prova e verificare le metriche (solo in modalità dev).
 
 ### 🎨 Rebranding & Esperienza Utente
 
@@ -62,8 +68,7 @@ Il compagno digitale essenziale per la gestione moderna del tuo salone.
 
 ## Installazione e Aggiornamento
 
-1. Scaricare l'ultimo installer Root Setup 2.0.0.exe dalla cartella
-   elease/.
+1. Scaricare l'ultimo installer **Root Manager Setup 2.5.exe** dalla cartella `release/` (o release_new/).
 2. Eseguire l'installazione (aggiornerà automaticamente la versione precedente mantenendo i dati di login).
 3. Al primo avvio, godetevi la nuova Splash Screen!
 
