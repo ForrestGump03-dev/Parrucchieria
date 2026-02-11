@@ -120,7 +120,6 @@ export function TreatmentProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useTreatmentContext() {
   const context = useContext(TreatmentContext);
   if (context === undefined) {

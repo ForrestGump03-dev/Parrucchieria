@@ -38,6 +38,7 @@ interface ServiceItem {
   id?: string;
   treatment: string;
   duration: number;
+  staffId?: string;
 }
 
 export default function AgendaModal({ isOpen, onClose, initialDate, initialStaffId, appointmentToEdit, onSaved, onDeleteRequest }: AgendaModalProps) {
@@ -51,7 +52,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
   const [isTreatmentManagerOpen, setIsTreatmentManagerOpen] = useState(false);
   const [isStaffManagerOpen, setIsStaffManagerOpen] = useState(false);
   
-  const { register, handleSubmit, setValue, reset } = useForm<ExternalFormData>();
+  const { register, handleSubmit, setValue, reset, getValues } = useForm<ExternalFormData>();
   const { register: registerNewClient, handleSubmit: handleSubmitNewClient, reset: resetNewClient, setValue: setValueNewClient } = useForm<NewClientFormData>();
   
   const [submitting, setSubmitting] = useState(false);
@@ -81,7 +82,8 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                  const mapped = siblings.map(s => ({ 
                    id: s.id, 
                    treatment: s.treatment,
-                   duration: s.duration || 30 // Load duration
+                   duration: s.duration || 30, // Load duration
+                   staffId: s.staff_id || undefined
                  }));
                  setSelectedServices(mapped);
               } else {
@@ -89,7 +91,8 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                  setSelectedServices([{ 
                    id: appointmentToEdit.id, 
                    treatment: appointmentToEdit.treatment,
-                   duration: appointmentToEdit.duration || 30 
+                   duration: appointmentToEdit.duration || 30,
+                   staffId: appointmentToEdit.staff_id || undefined
                   }]);
               }
           });
@@ -127,6 +130,12 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
   const updateDuration = (index: number, newDuration: number) => {
     const newServices = [...selectedServices];
     newServices[index].duration = newDuration;
+    setSelectedServices(newServices);
+  };
+
+  const updateServiceStaff = (index: number, newStaffId: string) => {
+    const newServices = [...selectedServices];
+    newServices[index].staffId = newStaffId || undefined;
     setSelectedServices(newServices);
   };
 
@@ -248,6 +257,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
             // Calculate next start time for NEXT iteration, but save CURRENT
             const duration = service.duration || 30;
             const thisSlotStart = currentStartTime;
+            const targetStaff = service.staffId || data.staff_id || null;
             
             if (service.id) {
                 await updateAppointment(service.id, {
@@ -256,7 +266,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                     start_time: thisSlotStart,
                     treatment: service.treatment,
                     price: null,
-                    staff_id: data.staff_id || null,
+                    staff_id: targetStaff,
                     duration: duration
                 });
             } else {
@@ -266,7 +276,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                     start_time: thisSlotStart,
                     treatment: service.treatment,
                     price: null,
-                    staff_id: data.staff_id || null,
+                    staff_id: targetStaff,
                     duration: duration
                 });
             }
@@ -281,6 +291,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
         for (const service of selectedServices) {
            const duration = service.duration || 30;
            const thisSlotStart = currentStartTime;
+           const targetStaff = service.staffId || data.staff_id || null;
            
            await addAppointment({
             client_id: selectedClient.id,
@@ -288,7 +299,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
             start_time: thisSlotStart,
             treatment: service.treatment,
             price: null,
-            staff_id: data.staff_id || null,
+            staff_id: targetStaff,
             duration: duration
           });
           
@@ -434,7 +445,13 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                         </button>
                      </div>
                      <select 
-                        {...register('staff_id')}
+                        {...register('staff_id', {
+                          onChange: (e) => {
+                             const newVal = e.target.value;
+                             // Update all items to new global staff
+                             setSelectedServices(prev => prev.map(s => ({ ...s, staffId: newVal || undefined })));
+                          }
+                        })}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500"
                      >                        <option value="">-- Chiunque --</option>
                         {staff.map(s => (
@@ -471,7 +488,10 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                                   // @ts-ignore
                                   const duration = tObj?.duration || 30;
                                   
-                                  setSelectedServices(prev => [...prev, { treatment: val, duration }]);
+                                  // Default staffId from global select
+                                  const globalStaffId = getValues('staff_id');
+
+                                  setSelectedServices(prev => [...prev, { treatment: val, duration, staffId: globalStaffId || undefined }]);
                                   setCurrentTreatment(''); // Reset immediately
                               }
                            }}
@@ -488,25 +508,40 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                        {selectedServices.length > 0 ? (
                          <ul className="divide-y divide-slate-100">
                             {selectedServices.map((item, idx) => (
-                              <li key={idx} className="p-3 flex items-center gap-3 text-sm">
-                                 <span className="font-medium text-slate-700 flex-1">{item.treatment}</span>
+                              <li key={idx} className="p-3 flex items-center gap-3 text-sm flex-wrap">
+                                 <div className="font-medium text-slate-700 w-full md:w-auto md:flex-1">{item.treatment}</div>
                                  
-                                 <div className="flex items-center gap-1">
-                                    <span className="text-xs text-slate-500">Durata:</span>
-                                    <select 
-                                        value={item.duration || 30} 
-                                        onChange={(e) => updateDuration(idx, Number(e.target.value))}
-                                        className="border border-slate-200 rounded px-2 py-1 text-xs bg-slate-50"
-                                    >
-                                        {[15, 30, 45, 60, 75, 90, 105, 120, 150, 180].map(m => (
-                                            <option key={m} value={m}>{m} min</option>
-                                        ))}
-                                    </select>
-                                 </div>
+                                 <div className="flex items-center gap-2 ml-auto">
+                                    <div className="flex items-center gap-1">
+                                       <select 
+                                         value={item.staffId || ''} 
+                                         onChange={(e) => updateServiceStaff(idx, e.target.value)}
+                                         className="border border-slate-200 rounded px-2 py-1 text-xs bg-slate-50 max-w-[100px] truncate"
+                                         title="Assegna operatore specifico"
+                                       >
+                                          <option value="">-- Chiunque --</option>
+                                          {staff.map(s => (
+                                             <option key={s.id} value={s.id}>{s.name}</option>
+                                          ))}
+                                       </select>
+                                    </div>
 
-                                 <button type="button" onClick={() => removeService(idx)} className="text-slate-400 hover:text-red-500">
-                                     <Trash2 size={16} />
-                                 </button>
+                                    <div className="flex items-center gap-1">
+                                       <select 
+                                           value={item.duration || 30} 
+                                           onChange={(e) => updateDuration(idx, Number(e.target.value))}
+                                           className="border border-slate-200 rounded px-2 py-1 text-xs bg-slate-50"
+                                       >
+                                           {[15, 30, 45, 60, 75, 90, 105, 120, 150, 180].map(m => (
+                                               <option key={m} value={m}>{m}m</option>
+                                           ))}
+                                       </select>
+                                    </div>
+
+                                    <button type="button" onClick={() => removeService(idx)} className="text-slate-400 hover:text-red-500">
+                                        <Trash2 size={16} />
+                                    </button>
+                                 </div>
                               </li>
                             ))}
                          </ul>
