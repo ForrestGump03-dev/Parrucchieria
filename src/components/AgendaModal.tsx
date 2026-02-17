@@ -324,7 +324,8 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
       let clean = selectedClient.phone.replace(/[^0-9]/g, '');
       if (!clean.startsWith('39')) clean = '39' + clean;
       
-      const msg = `Ciao ${selectedClient.first_name}, ricordiamo il tuo appuntamento domani!`;
+      const formattedDate = appointmentToEdit?.date ? format(new Date(appointmentToEdit.date), 'dd/MM/yyyy') : 'data da definire';
+      const msg = `Salve, ricordiamo che il suo appuntamento è previsto per il ${formattedDate} alle ${appointmentToEdit?.start_time}. Per qualsiasi informazione o modifica, non esiti a contattarci. Grazie!`;
       window.open(`https://wa.me/${clean}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
