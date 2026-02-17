@@ -3,6 +3,7 @@ import MainLayout from './layout/MainLayout';
 import Agenda from './pages/Agenda';
 import Clients from './pages/Clients';
 import Reports from './pages/Reports';
+import Inventory from './pages/Inventory';
 import Login from './pages/Login';
 import { useAuth } from './context/AuthContext';
 
@@ -29,6 +30,7 @@ function App() {
            <Route path="/" element={<MainLayout />}>
              <Route index element={<Agenda />} />
              <Route path="clients" element={<Clients />} />
+             <Route path="inventory" element={<Inventory />} />
              <Route path="reports" element={<Reports />} />
              <Route path="login" element={<Navigate to="/" replace />} />
            </Route>

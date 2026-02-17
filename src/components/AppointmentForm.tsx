@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
-import { Calendar, FileText, Phone, User, History as HistoryIcon, Pencil, Trash2, X, Plus, ShoppingBag, Check, Settings } from 'lucide-react';
+import { it } from 'date-fns/locale';
+import { Calendar, FileText, Phone, User, Pencil, Trash2, X, Plus, ShoppingBag, Check, Settings, Package, ChevronDown, ChevronRight, StickyNote } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { type Client, type Appointment } from '../types';
 import { useClients } from '../hooks/useClients';
@@ -9,6 +10,7 @@ import { useAppointments } from '../hooks/useAppointments';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useTreatments } from '../hooks/useTreatments';
+import { useProducts } from '../hooks/useProducts';
 import TreatmentManagerModal from './TreatmentManagerModal';
 import ConfirmModal from './ConfirmModal';
 
@@ -16,6 +18,12 @@ interface AppointmentFormProps {
   selectedClient?: Client;
   onClientUpdated: () => void;
   onSelectExistingClient?: (client: Client | undefined) => void;
+}
+
+interface ProductItem {
+    id: string;
+    product: any;
+    quantity: number;
 }
 
 interface FormData {
@@ -44,11 +52,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
   const { addAppointment, getLastPriceForTreatment, getClientHistory, deleteAppointment, updateAppointment } = useAppointments();
   const { getClientByPhone, updateClient, findPotentialDuplicates } = useClients();
   const { treatments } = useTreatments();
-  // const { staff } = useStaff(); // Unused for now in this form as requested to be simple? Or did I just forget to add the select?
-  // Actually the user asked for "Agenda divided in 3 columns", and "Appointment Form" to have duration.
-  // The user didn't explicitly ask for staff selection in the payment/main form, but it makes sense.
-  // For now to fix build error I will simply remove it or use it.
-  // Let's remove it for now to fix the build, as the main requirement was Agenda columns.
+  const { products, decrementStock } = useProducts();
   
   const [history, setHistory] = useState<Appointment[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -56,6 +60,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
   const [isEditingClient, setIsEditingClient] = useState(false);
   const [isTreatmentManagerOpen, setIsTreatmentManagerOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   
   // Watch phone for duplicate check
   const phoneValue = watch('phone');
@@ -89,7 +94,9 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
 
   // Multi-service state
   const [selectedServices, setSelectedServices] = useState<ServiceItem[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<ProductItem[]>([]);
   const [currentTreatment, setCurrentTreatment] = useState('');
+  const [currentProduct, setCurrentProduct] = useState('');
   const [currentPrice, setCurrentPrice] = useState<string>('');
   const [currentDuration, setCurrentDuration] = useState<string>('30');
 
@@ -150,11 +157,15 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
   const fetchHistory = useCallback(async (clientId: string) => {
     const data = await getClientHistory(clientId);
     setHistory(data || []);
+    if (data && data.length > 0) {
+        setExpandedDates(new Set([data[0].date]));
+    }
   }, [getClientHistory]);
 
   const cancelEdit = useCallback(() => {
     setEditingId(null);
     setSelectedServices([]);
+    setSelectedProducts([]);
     if (selectedClient) {
       setValue('date', format(new Date(), 'yyyy-MM-dd'));
     } else {
@@ -172,6 +183,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
         setValue('date', format(new Date(), 'yyyy-MM-dd'));
         // Load staff from last appointment? No, simplified.
         setSelectedServices([]);
+        setSelectedProducts([]);
       }
       fetchHistory(selectedClient.id);
     } else {
@@ -192,6 +204,20 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
       price: apt.price || 0, 
       duration: apt.duration || 30 
     }]);
+    
+    // Load products
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sold = (apt.products_sold as any[]) || [];
+    const mapped = sold.map(p => {
+        const found = products.find(prod => prod.id === p.id);
+        return {
+            id: p.id,
+            product: found || { id: p.id, name: p.name, price: p.price },
+            quantity: p.quantity || 1
+        };
+    });
+    setSelectedProducts(mapped);
+
     // Popola anche le note nello spazio del form in modo da poterle modificare
     setValue('notes', apt.notes || '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -272,6 +298,21 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
          clientId = newClient.id;
          onClientUpdated();
       }
+      
+      // Prepare products payload
+      const productsPayload = selectedProducts.map(p => ({
+          id: p.product.id,
+          name: p.product.name,
+          price: p.product.price,
+          quantity: p.quantity
+      }));
+      
+      // Decrement logic only for new entries
+      if (!editingId && productsPayload.length > 0) {
+          for (const item of selectedProducts) {
+             await decrementStock(item.product.id, item.quantity);
+          }
+      }
 
       const now = new Date();
       const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
@@ -283,11 +324,12 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
           treatment: service.treatment,
           price: service.price,
           notes: data.notes,
+          products_sold: productsPayload
         });
         toast.success('Trattamento aggiornato!');
         setEditingId(null);
       } else {
-        const promises = selectedServices.map(service => 
+        const promises = selectedServices.map((service, index) => 
           addAppointment({
             client_id: clientId!,
             date: data.date,
@@ -295,6 +337,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
             treatment: service.treatment,
             price: service.price,
             notes: data.notes,
+            products_sold: (index === 0) ? productsPayload : [],
           })
         );
         await Promise.all(promises);
@@ -305,6 +348,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
       
       if (!editingId) {
         setSelectedServices([]);
+        setSelectedProducts([]);
         setCurrentTreatment('');
         setCurrentPrice('');
         setValue('notes', '');
@@ -346,7 +390,64 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
     }
   };
 
-  const totalAmount = selectedServices.reduce((sum, item) => sum + item.price, 0);
+  const totalAmount = selectedServices.reduce((sum, item) => sum + item.price, 0)
+    + selectedProducts.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+
+  // Group History Logic
+  const toggleDate = (date: string) => {
+    setExpandedDates(prev => {
+        const next = new Set(prev);
+        if (next.has(date)) next.delete(date);
+        else next.add(date);
+        return next;
+    });
+  };
+
+  const groupedHistory = useMemo(() => {
+    const groups: Record<string, {
+      date: string;
+      items: Appointment[];
+      totalPrice: number;
+      productCount: number;
+      treatments: Set<string>;
+      notes: Set<string>;
+    }> = {};
+
+    history.forEach(apt => {
+        const dateKey = apt.date; // YYYY-MM-DD
+        if (!groups[dateKey]) {
+            groups[dateKey] = {
+                date: apt.date,
+                items: [],
+                totalPrice: 0,
+                productCount: 0,
+                treatments: new Set(),
+                notes: new Set()
+            };
+        }
+        
+        const g = groups[dateKey];
+        g.items.push(apt);
+        g.treatments.add(apt.treatment);
+        if (apt.notes) g.notes.add(apt.notes);
+        
+        let itemPrice = apt.price || 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sold = (apt.products_sold as any[]) || [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let productsTotal = 0;
+
+        sold.forEach((p: any) => {
+           const qty = p.quantity || 1;
+           productsTotal += (Number(p.price) * qty);
+           g.productCount += qty;
+        });
+
+        g.totalPrice += (itemPrice + productsTotal);
+    });
+
+    return Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [history]);
 
   return (
     <div className="space-y-6">
@@ -564,12 +665,6 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                    Nessun servizio selezionato
                  </div>
                )}
-               {selectedServices.length > 0 && (
-                 <div className="bg-slate-50 p-3 flex justify-between items-center font-bold text-slate-800 border-t border-slate-200">
-                    <span>Totale</span>
-                    <span>€ {totalAmount.toFixed(2)}</span>
-                 </div>
-               )}
             </div>
             
             {editingId && (
@@ -588,6 +683,80 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
             )}
           </div>
         </div>
+
+          {/* Products Section */}
+          <div className="pt-4 border-t border-slate-100">
+              <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                      <Package size={14} /> Prodotti & Rivendita
+                  </h3>
+              </div>
+              
+              {!editingId && (
+              <div className="flex gap-2 mb-2">
+                    <select
+                      value={currentProduct}
+                      onChange={(e) => {
+                          const val = e.target.value;
+                          if (val) {
+                              const pObj = products.find(p => p.id === val);
+                              if (pObj) {
+                                  // Add or increment
+                                  setSelectedProducts(prev => {
+                                      const exists = prev.find(item => item.product.id === val);
+                                      if (exists) {
+                                          return prev.map(item => item.product.id === val ? { ...item, quantity: item.quantity + 1 } : item);
+                                      }
+                                      return [...prev, { id: val, product: pObj, quantity: 1 }];
+                                  });
+                              }
+                              setCurrentProduct('');
+                          }
+                      }}
+                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                    >
+                      <option value="">Aggiungi prodotto al conto...</option>
+                      {products.filter(p => p.stock > 0).map(p => (
+                        <option key={p.id} value={p.id}>{p.name} (€ {p.price})</option>
+                      ))}
+                    </select>
+              </div>
+              )}
+              
+              {selectedProducts.length > 0 && (
+                  <div className="bg-orange-50/50 border border-orange-100 rounded-lg p-3 space-y-2">
+                      {selectedProducts.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-sm">
+                              <div className="flex items-center gap-2">
+                                  <span className="font-medium text-slate-700">{item.product.name}</span>
+                                  <span className="text-slate-400 text-xs">x{item.quantity}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                  <span className="font-semibold text-slate-700">€ {(item.product.price * item.quantity).toFixed(2)}</span>
+                                  {!editingId && (
+                                  <button 
+                                    type="button" 
+                                    onClick={() => setSelectedProducts(prev => prev.filter(p => p.id !== item.id))}
+                                    className="text-slate-400 hover:text-red-500"
+                                  >
+                                      <X size={14} />
+                                  </button>
+                                  )}
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              )}
+          </div>
+          
+          {/* Unified Total Section */}
+           <div className="bg-slate-50 p-4 rounded-lg flex justify-between items-center border border-slate-200 shadow-sm mt-2"> 
+               <div className="flex flex-col">
+                  <span className="text-sm text-slate-500 font-medium uppercase tracking-wider">Totale Complessivo</span>
+                  <span className="text-xs text-slate-400">Servizi + Prodotti</span>
+               </div>
+               <span className="text-2xl font-bold text-slate-800">€ {totalAmount.toFixed(2)}</span>
+           </div>
 
           {/* Note Field (New) - mostrato anche in modifica per poter aggiornare le note */}
           <div className="mt-4 pt-4 border-t border-slate-100">
@@ -625,64 +794,124 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
 
       {/* History Section */}
       {selectedClient && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-           <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-             <div className="flex items-center gap-2">
-               <HistoryIcon className="text-slate-500" size={18} />
-               <h3 className="font-semibold text-slate-800">Storico Trattamenti - {selectedClient.first_name} {selectedClient.last_name}</h3>
-             </div>
-             <span className="text-xs text-slate-400 font-normal">{history.length} trattamenti trovati</span>
-           </div>
-           <div className="overflow-x-auto">
-             <table className="w-full text-sm text-left text-slate-600">
-               <thead className="bg-slate-50 text-slate-700 uppercase text-xs">
-                 <tr>
-                   <th className="px-6 py-3">Data</th>
-                   <th className="px-6 py-3">Trattamento</th>
-                   <th className="px-6 py-3">Note</th>
-                   <th className="px-6 py-3 text-right">Prezzo</th>
-                   <th className="px-6 py-3 text-center">Azioni</th>
-                 </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-100">
-                 {history.length > 0 ? (
-                   history.map((item) => (
-                     <tr key={item.id} className={`hover:bg-slate-50 transition-colors ${editingId === item.id ? 'bg-indigo-50/60' : ''}`}>
-                       <td className="px-6 py-4 font-medium whitespace-nowrap">{format(new Date(item.date), 'dd/MM/yyyy')}</td>
-                       <td className="px-6 py-4">{item.treatment}</td>
-                       <td className="px-6 py-4 text-xs text-slate-500 max-w-[200px] truncate" title={item.notes || ''}>{item.notes || '-'}</td>
-                       <td className="px-6 py-4 text-right font-semibold">€ {(item.price || 0).toFixed(2)}</td>
-                       <td className="px-6 py-4">
-                         <div className="flex justify-center gap-2">
-                           <button 
-                             onClick={() => handleEdit(item)}
-                             className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
-                             title="Modifica"
+        <div className="space-y-4">
+           {groupedHistory.length > 0 ? (
+               groupedHistory.map((group) => {
+                   const isExpanded = expandedDates.has(group.date);
+                   const treatmentsList = Array.from(group.treatments);
+                   const summaryText = treatmentsList.slice(0, 2).join(", ") + (treatmentsList.length > 2 ? ` + ${treatmentsList.length - 2} altri` : '');
+                   
+                   return (
+                       <div key={group.date} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                           {/* Group Header */}
+                           <div 
+                               onClick={() => toggleDate(group.date)}
+                               className="p-4 bg-slate-50 hover:bg-slate-100 cursor-pointer flex items-center justify-between transition-colors select-none"
                            >
-                             <Pencil size={16} />
-                           </button>
-                           <button 
-                             onClick={() => handleDelete(item.id)}
-                             className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                             title="Elimina"
-                           >
-                             <Trash2 size={16} />
-                           </button>
-                         </div>
-                       </td>
-                     </tr>
-                   ))
-                 ) : (
-                   <tr>
-                     <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
-                       <p className="mb-2">Nessun trattamento registrato per questo cliente.</p>
-                       <span className="text-xs text-slate-300">Compila il form sopra per aggiungerne uno.</span>
-                     </td>
-                   </tr>
-                 )}
-               </tbody>
-             </table>
-           </div>
+                               <div className="flex items-center gap-3">
+                                   <div className={`p-1.5 rounded-full ${isExpanded ? 'bg-indigo-100 text-indigo-600' : 'bg-white text-slate-400'}`}>
+                                       {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                                   </div>
+                                   <div>
+                                       <div className="flex items-center gap-2">
+                                           <span className="font-semibold text-slate-800 capitalize">{format(new Date(group.date), 'EEEE d MMMM yyyy', { locale: it })}</span>
+                                           <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 font-medium">{group.items.length} {group.items.length === 1 ? 'Servizio' : 'Servizi'}</span>
+                                       </div>
+                                       <div className="text-sm text-slate-500 mt-0.5 flex items-center gap-2">
+                                           <span>{summaryText}</span>
+                                           {group.notes.size > 0 && (
+                                                <span className="text-amber-500 flex items-center" title="Ci sono note in questa giornata">
+                                                    <StickyNote size={12} className="fill-amber-500" />
+                                                </span>
+                                           )}
+                                       </div>
+                                   </div>
+                               </div>
+                               <div className="flex flex-col items-end">
+                                   <span className="font-bold text-slate-800 text-lg">€ {group.totalPrice.toFixed(2)}</span>
+                                   {group.productCount > 0 && (
+                                       <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                                           <Package size={12} /> {group.productCount} Prodotti
+                                       </span>
+                                   )}
+                               </div>
+                           </div>
+                           
+                           {/* Group Details */}
+                           {isExpanded && (
+                               <div className="divide-y divide-slate-100 border-t border-slate-200">
+                                   {group.items.map((item) => {
+                                       // Calculate products total if available
+                                       let prodTotal = 0;
+                                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                       const sold = (item.products_sold as any[]) || [];
+                                       sold.forEach((p: any) => prodTotal += (Number(p.price) * Number(p.quantity)));
+                                       
+                                       return (
+                                           <div key={item.id} className={`p-4 flex items-center justify-between hover:bg-slate-50 transition-colors ${editingId === item.id ? 'bg-indigo-50/60' : ''}`}>
+                                               <div className="flex-1">
+                                                   <div className="flex items-center gap-2 mb-1">
+                                                       <span className="font-medium text-indigo-900">{item.treatment}</span>
+                                                       <span className="text-slate-400 text-xs">•</span>
+                                                       <span className="text-slate-500 text-xs">{format(new Date(item.date), 'HH:mm')}</span>
+                                                   </div>
+                                                   
+                                                   {sold.length > 0 && (
+                                                       <div className="flex flex-wrap gap-1 mb-2">
+                                                           {sold.map((p: any, i: number) => (
+                                                               <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-100" title={`€ ${p.price}`}>
+                                                                   {p.quantity > 1 && <span className="mr-0.5 opacity-70">x{p.quantity}</span>}
+                                                                   {p.name}
+                                                               </span>
+                                                           ))}
+                                                       </div>
+                                                   )}
+                                                   
+                                                   {item.notes && (
+                                                       <div className="text-xs text-slate-500 flex items-start gap-1 bg-amber-50/50 p-2 rounded max-w-md">
+                                                           <StickyNote size={12} className="mt-0.5 text-amber-400 shrink-0" />
+                                                           <span className="italic">{item.notes}</span>
+                                                       </div>
+                                                   )}
+                                               </div>
+                                               
+                                               <div className="flex items-center gap-6">
+                                                   <div className="text-right">
+                                                       <div className="font-bold text-slate-700">€ {((item.price || 0) + prodTotal).toFixed(2)}</div>
+                                                       {prodTotal > 0 && <span className="text-[10px] text-slate-400">servizio: € {(item.price || 0).toFixed(2)}</span>}
+                                                   </div>
+                                                   
+                                                   <div className="flex gap-1">
+                                                       <button 
+                                                            onClick={(e) => { e.stopPropagation(); handleEdit(item); }}
+                                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                            title="Modifica singolo interveto"
+                                                       >
+                                                            <Pencil size={16} />
+                                                       </button>
+                                                       <button 
+                                                            onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
+                                                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                            title="Elimina singolo intervento"
+                                                       >
+                                                            <Trash2 size={16} />
+                                                       </button>
+                                                   </div>
+                                               </div>
+                                           </div>
+                                       );
+                                   })}
+                               </div>
+                           )}
+                       </div>
+                   )
+               })
+           ) : (
+               <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center text-slate-400 italic">
+                   <p className="mb-2">Nessun trattamento registrato per questo cliente.</p>
+                   <span className="text-xs text-slate-300">Usa il form sopra per effettuare la prima registrazione.</span>
+               </div>
+           )}
         </div>
       )}
       

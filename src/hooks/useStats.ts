@@ -1,13 +1,13 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { isSameDay, startOfMonth, endOfMonth, startOfYear, isWithinInterval, subDays, differenceInDays, parse, startOfDay, format } from 'date-fns';
+import { isSameDay, startOfMonth, endOfMonth, isWithinInterval, subDays, differenceInDays, parse, startOfDay, format } from 'date-fns';
 import { it } from 'date-fns/locale';
 
 export interface TreatmentStat {
   name: string;
   count: number;
   totalRevenue: number;
-  penetration: number; // % of visits that included this treatment
+  penetration: number;
 }
 
 export interface ClientStat {
@@ -15,7 +15,7 @@ export interface ClientStat {
   name: string;
   visits: number;
   spent: number;
-  lastVisit: string; // ISO date
+  lastVisit: string;
 }
 
 export interface StaffStat {
@@ -31,18 +31,16 @@ export interface DayTrend {
 }
 
 export interface KPIStats {
-  // Global Counters
   todayRevenue: number;
   monthRevenue: number;
   yearRevenue: number;
-  
-  // Period Analysis
   periodRevenue: number;
   previousPeriodRevenue: number;
   growth: number;
-  totalVisits: number; // Unique visits in period
+  totalVisits: number;
   averageTicket: number;
-
+  productRevenue: number; 
+  topProducts: { name: string; quantity: number; revenue: number }[];
   topTreatments: TreatmentStat[];
   topClients: ClientStat[];
   sleepingClients: ClientStat[];
@@ -75,9 +73,7 @@ export function useStats() {
       // Calculate Previous Range for Comparison
       const dayDiff = differenceInDays(currentRange.end, currentRange.start) + 1;
       const prevRangeStart = subDays(currentRange.start, dayDiff);
-      const prevRangeEnd = subDays(currentRange.end, dayDiff); // Compare with same duration immediately before
-
-      const firstDayOfYear = startOfYear(today);
+      const prevRangeEnd = subDays(currentRange.end, dayDiff); 
 
       // Fetch all PAID appointments (price is not null)
       const { data, error } = await supabase
@@ -88,7 +84,7 @@ export function useStats() {
             staff_members (id, name)
         `)
         .not('price', 'is', null) 
-        .order('date', { ascending: true });
+        .order('date', { ascending: true }); // ASC important for timeline
 
       if (error) throw error;
       if (!data) return;
@@ -103,11 +99,13 @@ export function useStats() {
       // 2. Calculate Period Stats
       let periodRev = 0;
       let prevPeriodRev = 0;
+      let productRev = 0;
       
       const visitsSet = new Set<string>(); // "ClientID_Date" to count unique visits
       const treatmentMap = new Map<string, { count: number; total: number }>();
-      const clientMap = new Map<string, { name: string; visits: Set<string>; spent: number; lastVisit: string }>(); // Visits is Set of dates
+      const productMap = new Map<string, { quantity: number; revenue: number }>();
       const allClientsMap = new Map<string, { name: string; lastVisit: string; spent: number; visits: number }>();
+      const clientPeriodMap = new Map<string, { name: string; visits: Set<string>; spent: number; lastVisit: string }>();
       const staffMap = new Map<string, { name: string; rev: number; count: number }>();
       const dayMap = new Map<string, number>();
 
@@ -121,16 +119,27 @@ export function useStats() {
 
       appointments.forEach(apt => {
         // Fix: Parse strictly as local date at midnight to match calendar days
-        // apt.date is "YYYY-MM-DD"
         const aptDate = startOfDay(parse(apt.date, 'yyyy-MM-dd', new Date()));
         
         const price = Number(apt.price);
+        
+        // Calculate Product Revenue
+        let productsTotal = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sold = (apt.products_sold as any[]) || [];
+        sold.forEach((p: any) => {
+            productsTotal += (Number(p.price) * Number(p.quantity));
+        });
+
+        // Total Transaction Value
+        const totalValue = price + productsTotal;
+
         const treatment = apt.treatment;
         const clientId = apt.client_id;
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         const clientName = apt.clients ? `${apt.clients.first_name} ${apt.clients.last_name}` : 'Cliente Eliminato';
-        const uniqueVisitKey = `${clientId}_${apt.date}`; // Unique per day per client
+        const uniqueVisitKey = `${clientId}_${apt.date}`; 
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         const staffName = apt.staff_members?.name || 'Non Assegnato';
@@ -141,144 +150,150 @@ export function useStats() {
         }
         const globalClient = allClientsMap.get(clientId)!;
         // Since data is ordered by date ASC, the current apt is always >= stored lastVisit
-        globalClient.lastVisit = apt.date; 
-        globalClient.spent += price;
+        if (apt.date > globalClient.lastVisit) globalClient.lastVisit = apt.date;
+        globalClient.spent += totalValue; // Include products
         globalClient.visits += 1;
 
-        // Global Buckets
-        if (isSameDay(aptDate, today)) todayRev += price;
-        if (isWithinInterval(aptDate, { start: startOfMonth(today), end: endOfMonth(today) })) monthRev += price;
-        if (aptDate >= firstDayOfYear) yearRev += price;
-
-        // Period Analysis
-        if (isWithinInterval(aptDate, { start: currentRange.start, end: currentRange.end })) {
-          periodRev += price;
-          visitsSet.add(uniqueVisitKey);
-
-          // Treatments in period
-          if (!treatmentMap.has(treatment)) {
-            treatmentMap.set(treatment, { count: 0, total: 0 });
-          }
-          const tStats = treatmentMap.get(treatment)!;
-          tStats.count += 1; // Count every execution
-          tStats.total += price;
-
-          // Clients in period
-          if (!clientMap.has(clientId)) {
-             clientMap.set(clientId, { name: clientName, visits: new Set(), spent: 0, lastVisit: apt.date });
-          }
-          const cStats = clientMap.get(clientId)!;
-          cStats.visits.add(apt.date); // Add date to set to count visits
-          cStats.spent += price;
-          cStats.lastVisit = apt.date; // Upgrade last visit in period
-          
-          // Staff
-          if (!staffMap.has(staffName)) staffMap.set(staffName, { name: staffName, rev: 0, count: 0 });
-          const sStats = staffMap.get(staffName)!;
-          sStats.rev += price;
-          sStats.count += 1;
-
-          // Daily Trend
-          const dateKey = format(aptDate, 'yyyy-MM-dd');
-          const currentDayVal = dayMap.get(dateKey) || 0;
-          dayMap.set(dateKey, currentDayVal + price);
+        // Global Buckets (Today/Month/Year)
+        if (isSameDay(aptDate, today)) {
+          todayRev += totalValue;
         }
+        if (isWithinInterval(aptDate, { start: startOfMonth(today), end: endOfMonth(today) })) {
+           monthRev += totalValue;
+        }
+        if (format(aptDate, 'yyyy') === format(today, 'yyyy')) { // Simple Year Check
+           yearRev += totalValue;
+        }
+        
+        // --- PERIOD TRACKING ---
+        if (isWithinInterval(aptDate, currentRange)) {
+            periodRev += totalValue;
+            productRev += productsTotal;
+            visitsSet.add(uniqueVisitKey);
 
-        // Previous Period Analysis (for comparison)
-        if (isWithinInterval(aptDate, { start: prevRangeStart, end: prevRangeEnd })) {
-          prevPeriodRev += price;
+            // Period Clients Stats
+            if (!clientPeriodMap.has(clientId)) {
+               clientPeriodMap.set(clientId, { name: clientName, visits: new Set(), spent: 0, lastVisit: apt.date });
+            }
+            const cStat = clientPeriodMap.get(clientId)!;
+            cStat.spent += totalValue;
+            cStat.visits.add(apt.date);
+            if(apt.date > cStat.lastVisit) cStat.lastVisit = apt.date;
+
+            // Period Treatments (Only the service part counts for treatment stats)
+            if (treatment) {
+                if (!treatmentMap.has(treatment)) treatmentMap.set(treatment, { count: 0, total: 0 });
+                const tStat = treatmentMap.get(treatment)!;
+                tStat.count += 1;
+                tStat.total += price; 
+            }
+
+            // Period Products
+            sold.forEach((p: any) => {
+               const pKey = p.name;
+               const pVal = Number(p.price) * Number(p.quantity);
+               if (!productMap.has(pKey)) productMap.set(pKey, { quantity: 0, revenue: 0 });
+               const pStat = productMap.get(pKey)!;
+               pStat.quantity += Number(p.quantity);
+               pStat.revenue += pVal;
+            });
+
+            // Staff Stats
+            if(!staffMap.has(staffName)) staffMap.set(staffName, { name: staffName, rev: 0, count: 0 });
+            const sStat = staffMap.get(staffName)!;
+            sStat.rev += totalValue; // Attribute total value to staff?
+            sStat.count += 1; 
+            
+            // Daily Trend
+            const dateKey = format(aptDate, 'yyyy-MM-dd');
+            if (dayMap.has(dateKey)) {
+                dayMap.set(dateKey, dayMap.get(dateKey)! + totalValue);
+            }
+
+        } else if (isWithinInterval(aptDate, { start: prevRangeStart, end: prevRangeEnd })) {
+            prevPeriodRev += totalValue;
         }
       });
-
-      // 3. Finalize Metrics
-      let growth = 0;
-      if (prevPeriodRev > 0) {
-        growth = ((periodRev - prevPeriodRev) / prevPeriodRev) * 100;
-      } else if (periodRev > 0) {
-        growth = 100; 
-      }
-
-      const totalUniqueVisits = visitsSet.size;
-      const averageTicket = totalUniqueVisits > 0 ? periodRev / totalUniqueVisits : 0; // NEW
-
-      // Top Treatments with Penetration
+      
+      // Transform Maps to Arrays
       const topTreatments = Array.from(treatmentMap.entries())
-        .map(([name, val]) => ({
-          name,
-          count: val.count,
-          totalRevenue: val.total,
-          penetration: totalUniqueVisits > 0 ? (val.count / totalUniqueVisits) * 100 : 0
+        .map(([name, stat]) => ({
+            name,
+            count: stat.count,
+            totalRevenue: stat.total,
+            penetration: (stat.count / (visitsSet.size || 1)) * 100
         }))
-        .sort((a, b) => b.count - a.count); // Sort by popularity
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
 
-      // Top Clients (Faithful)
-      const topClients = Array.from(clientMap.entries())
-        .map(([id, val]) => ({
-          id,
-          name: val.name,
-          visits: val.visits.size,
-          spent: val.spent,
-          lastVisit: val.lastVisit
-        }))
-        .sort((a, b) => b.visits - a.visits)
-        .slice(0, 10); // Top 10
-
-      // Sleeping Clients (Oldest Last Visit)
-      const sleepingClients = Array.from(allClientsMap.entries())
-        .map(([id, val]) => ({
-          id,
-          name: val.name,
-          visits: val.visits,
-          spent: val.spent,
-          lastVisit: val.lastVisit
-        }))
-        .sort((a, b) => new Date(a.lastVisit).getTime() - new Date(b.lastVisit).getTime()) // Oldest date first
-        .slice(0, 10);
+      const topProducts = Array.from(productMap.entries())
+        .map(([name, stat]) => ({ name, ...stat }))
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5);
         
-      // NEW: Staff ranking
+      const topClients = Array.from(clientPeriodMap.values())
+        .map(c => ({
+            id: 'n/a', // Not critical here
+            name: c.name,
+            visits: c.visits.size,
+            spent: c.spent,
+            lastVisit: c.lastVisit
+        }))
+        .sort((a, b) => b.spent - a.spent)
+        .slice(0, 5);
+
+      // Sleeping Clients (Didn't visit in last 60 days but have visited before)
+      const sixtyDaysAgo = subDays(today, 60);
+      const sleepingClients = Array.from(allClientsMap.values())
+        .filter(c => parse(c.lastVisit, 'yyyy-MM-dd', new Date()) < sixtyDaysAgo)
+        .sort((a, b) => b.spent - a.spent) // High value lost clients first
+        .slice(0, 50)
+        .map(c => ({ ...c, id: 'n/a' }));
+
       const staffStats = Array.from(staffMap.values())
         .map(s => ({
             name: s.name,
             totalRevenue: s.rev,
             servicesCount: s.count
         }))
-        .sort((a,b) => b.totalRevenue - a.totalRevenue);
+        .sort((a, b) => b.totalRevenue - a.totalRevenue); // Best earner first
 
-      // NEW: Daily Data
       const dailyTrend = Array.from(dayMap.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([date, val]) => {
-            const d = parse(date, 'yyyy-MM-dd', new Date());
-            return {
-                date,
-                label: format(d, 'eee dd', { locale: it }),
-                value: val
-            };
-        });
+        .map(([date, value]) => ({
+            date,
+            label: format(parse(date, 'yyyy-MM-dd', new Date()), 'd MMM', { locale: it }),
+            value
+        }));
 
+      // Calculate aggregated metrics
+      const growth = prevPeriodRev === 0 ? (periodRev > 0 ? 100 : 0) : ((periodRev - prevPeriodRev) / prevPeriodRev) * 100;
+      const totalVisits = visitsSet.size;
+      const averageTicket = totalVisits === 0 ? 0 : periodRev / totalVisits;
 
       setStats({
-        todayRevenue: todayRev,
-        monthRevenue: monthRev,
-        yearRevenue: yearRev,
-        periodRevenue: periodRev,
-        previousPeriodRevenue: prevPeriodRev,
-        growth,
-        totalVisits: totalUniqueVisits,
-        averageTicket,
-        topTreatments,
-        topClients,
-        sleepingClients,
-        staffStats,
-        dailyTrend
+          todayRevenue: todayRev,
+          monthRevenue: monthRev,
+          yearRevenue: yearRev,
+          periodRevenue: periodRev,
+          previousPeriodRevenue: prevPeriodRev,
+          growth,
+          totalVisits,
+          averageTicket,
+          productRevenue: productRev,
+          topProducts,
+          topTreatments,
+          topClients,
+          sleepingClients,
+          staffStats,
+          dailyTrend
       });
-
-    } catch (err) {
-      console.error(err);
+    } catch (e) {
+      console.error(e);
+      // toast.error("Errore caricamento statistiche");
     } finally {
       setLoading(false);
     }
-  }, []); // Dependencies
+  }, []);
 
   return { stats, loading, fetchStats };
 }

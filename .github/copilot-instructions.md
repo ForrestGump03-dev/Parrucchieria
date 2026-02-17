@@ -1,7 +1,7 @@
 # Copilot Instructions
 
 ## Project Context
-- **Name**: Root Salon Manager (v2)
+- **Name**: Root Salon Manager (v2.7)
 - **Stack**: React 19, Electron 40, Supabase, Tailwind CSS 4.
 - **Language**: TypeScript (Strict).
 - **Architecture**: Electron-wrapped SPA with Supabase backend.
@@ -20,7 +20,20 @@
 ## Business Logic Rules
 - **Appointment Lifecycle**:
   - **Booking**: `price` is usually `null`. Displayed in Agenda.
-  - **Completed/Paid**: `price` is set (not null). Moves to "History/Storico" and may be hidden from the main Agenda view depending on filters.
+  - **Completed/Paid**: 
+    - `price` is set (not null).
+    - Data stored in `appointments` (services) and `products_sold` (products).
+    - Displayed in "History/Storico" grouped by Date (Session View).
+  - **Checkout**:
+    - Unified Form for Services + Products.
+    - Products stock is decremented upon checkout.
+    - ConfirmModal used for critical deletions (Inventory).
+- **History View**:
+  - Grouped by Date (Accordion style).
+  - Shows Daily Total (Services + Products).
+  - Expandable to see individual items.
+- **Inventory**:
+  - Custom `ConfirmModal` for localized, styled confirmations.
 - **Backup System**:
   - Located in Security settings.
   - Expects **RLS-compliant** CSV exports (only download current user's data).

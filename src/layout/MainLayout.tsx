@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Calendar, Users, BarChart3, LogOut, Bell } from 'lucide-react';
+import { Package, Calendar, Users, BarChart3, LogOut, Bell, Lock } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
@@ -10,7 +10,6 @@ import { useNotifications } from '../context/NotificationContext';
 import NotificationSettingsModal from '../components/NotificationSettingsModal';
 import NotificationDrawer from '../components/NotificationDrawer';
 import ChangePasswordModal from '../components/ChangePasswordModal';
-import { Lock } from 'lucide-react';
 
 export default function MainLayout() {
   const location = useLocation();
@@ -35,6 +34,7 @@ export default function MainLayout() {
   const navItems = [
     { path: '/', label: 'Agenda', icon: Calendar },
     { path: '/clients', label: 'Clienti & Cassa', icon: Users },
+    { path: '/inventory', label: 'Magazzino', icon: Package },
     { path: '/reports', label: 'Report & Analisi', icon: BarChart3 },
   ];
 
@@ -129,7 +129,7 @@ export default function MainLayout() {
 
         <div className="p-4 border-t border-slate-800">
           <div className="text-xs text-slate-500 text-center">
-            v2.0.0 &copy; 2026
+            v2.5 &copy; 2026
           </div>
         </div>
       </aside>

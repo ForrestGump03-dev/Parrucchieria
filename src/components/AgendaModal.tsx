@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { X, Save, Clock, UserPlus, ArrowLeft, Trash2, Settings } from 'lucide-react';
+import { X, Save, Clock, UserPlus, ArrowLeft, Trash2, Settings, MessageCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { type Client, type Appointment } from '../types';
 import ClientList from './ClientList';
@@ -252,9 +252,8 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
          }
 
          // 2. Update existing & Insert new
-         // We must do this sequentially to update times
-         for (const service of selectedServices) {
-            // Calculate next start time for NEXT iteration, but save CURRENT
+         for (let i = 0; i < selectedServices.length; i++) {
+            const service = selectedServices[i];
             const duration = service.duration || 30;
             const thisSlotStart = currentStartTime;
             const targetStaff = service.staffId || data.staff_id || null;
@@ -288,7 +287,8 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
          toast.success("Appuntamento aggiornato!");
       } else {
         // Bulk Create (Sequential)
-        for (const service of selectedServices) {
+        for (let i = 0; i < selectedServices.length; i++) {
+           const service = selectedServices[i];
            const duration = service.duration || 30;
            const thisSlotStart = currentStartTime;
            const targetStaff = service.staffId || data.staff_id || null;
@@ -309,13 +309,23 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
       
       onSaved();
       onClose();
-      toast.success("Appuntamento salvato!");
+      // toast.success("Appuntamento salvato!"); // handled inside if/else to be specific
     } catch (e) {
       console.error(e);
       toast.error('Errore salvataggio');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const openWhatsApp = () => {
+      if (!selectedClient?.phone) return;
+      // Strip formatting, ensure 39
+      let clean = selectedClient.phone.replace(/[^0-9]/g, '');
+      if (!clean.startsWith('39')) clean = '39' + clean;
+      
+      const msg = `Ciao ${selectedClient.first_name}, ricordiamo il tuo appuntamento domani!`;
+      window.open(`https://wa.me/${clean}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   if (!isOpen) return null;
@@ -417,7 +427,19 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                 <div className="bg-slate-50 p-3 rounded-lg flex justify-between items-center">
                   <div>
                     <div className="text-sm text-slate-500">Cliente Selezionato</div>
-                    <div className="font-semibold text-slate-800">{selectedClient?.first_name} {selectedClient?.last_name}</div>
+                    <div className="font-semibold text-slate-800 flex items-center gap-2">
+                        {selectedClient?.first_name} {selectedClient?.last_name}
+                        {selectedClient?.phone && (
+                            <button 
+                                type="button" 
+                                onClick={openWhatsApp}
+                                className="text-green-600 hover:text-green-700 bg-green-50 p-1 rounded-full transition-colors"
+                                title="Invia WhatsApp"
+                            >
+                                <MessageCircle size={16} />
+                            </button>
+                        )}
+                    </div>
                   </div>
                   <button type="button" onClick={() => setStep('client')} className="text-sm text-indigo-600 hover:underline">
                     Cambia
@@ -551,8 +573,8 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                          </div>
                        )}
                    </div>
-                   
-                   {/* Summary of total duration */}
+
+                   {/* Summary of total duration */ }
                    {selectedServices.length > 0 && (
                       <div className="text-right text-xs text-slate-500">
                          Totale stimato: {selectedServices.reduce((acc, curr) => acc + (curr.duration || 30), 0)} min

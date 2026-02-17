@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStats, type DateRange } from '../hooks/useStats';
-import { TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard, Award, UserCheck, UserMinus, Filter, ArrowRight, Database, Download, Users, BarChart as BarChartIcon } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, CreditCard, Award, UserCheck, UserMinus, Filter, ArrowRight, Database, Download, Users, BarChart as BarChartIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, parse, startOfDay, endOfDay, isValid } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -292,12 +292,17 @@ export default function Reports() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
             <div>
-               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Incasso Periodo</p>
+               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Incasso Totale Periodo</p>
                <h3 className="text-2xl font-bold text-slate-800 mt-1">€ {stats?.periodRevenue.toFixed(2)}</h3>
                {stats && (
-                 <div className={`flex items-center gap-1 text-xs font-medium mt-1 ${stats.growth >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                   {stats.growth >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                   <span>{Math.abs(stats.growth) > 999 ? '> 999%' : `${Math.abs(stats.growth).toFixed(1)}%`} vs prec.</span>
+                 <div className="mt-1 space-y-0.5">
+                   <div className={`flex items-center gap-1 text-xs font-medium ${stats.growth >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                     {stats.growth >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                     <span>{Math.abs(stats.growth) > 999 ? '> 999%' : `${Math.abs(stats.growth).toFixed(1)}%`} vs prec.</span>
+                   </div>
+                   <div className="text-[10px] text-slate-400">
+                      di cui € {stats.productRevenue.toFixed(2)} da prodotti
+                   </div>
                  </div>
                )}
             </div>
@@ -326,15 +331,7 @@ export default function Reports() {
             </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
-            <div>
-               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Incasso Anno</p>
-               <h3 className="text-2xl font-bold text-slate-800 mt-1">€ {stats?.yearRevenue.toFixed(0)}</h3>
-            </div>
-            <div className="p-3 bg-amber-50 rounded-full text-amber-600">
-               <Calendar size={20} />
-            </div>
-        </div>
+        
       </div>
 
       {/* CHARTS SECTION */}
@@ -450,7 +447,38 @@ export default function Reports() {
                   )}
                </div>
             </div>
-
+            {/* Top Products Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+               <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+                 <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                   <CreditCard size={20} />
+                 </div>
+                 Top Prodotti
+               </h3>
+               <div className="space-y-4">
+                  {stats?.topProducts?.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between border-b last:border-0 border-slate-100 pb-3 last:pb-0">
+                       <div className="flex items-center gap-3">
+                          <span className={`
+                             text-sm font-bold w-6 h-6 flex items-center justify-center rounded-full
+                             ${i === 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}
+                          `}>{i + 1}</span>
+                          <div>
+                            <div className="font-semibold text-slate-800 text-sm">{p.name}</div>
+                            <div className="text-xs text-slate-500">{p.quantity} venduti</div>
+                          </div>
+                       </div>
+                       <div className="text-right">
+                          <div className="font-bold text-slate-800 text-sm">€ {p.revenue.toFixed(2)}</div>
+                          <div className="text-xs text-slate-400">Ricavo Tot.</div>
+                       </div>
+                    </div>
+                  ))}
+                  {(!stats?.topProducts || stats.topProducts.length === 0) && (
+                     <div className="text-center text-slate-400 py-8 italic text-sm">Nessun prodotto venduto nel periodo</div>
+                  )}
+               </div>
+            </div>
             {/* Top Clients Table */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                <div className="flex items-center justify-between mb-6">

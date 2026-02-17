@@ -6,6 +6,19 @@ export interface Client {
   phone: string;
 }
 
+export interface Product {
+    id: string;
+    created_at: string;
+    user_id: string;
+    name: string;
+    brand?: string;
+    price: number;
+    cost_price?: number;
+    stock: number;
+    min_stock?: number;
+    barcode?: string;
+  }
+
 export interface Appointment {
   id: string;
   created_at: string;
@@ -18,6 +31,12 @@ export interface Appointment {
   // New fields for v2.1
   staff_id?: string | null;
   duration?: number; // minutes
+  products_sold?: {
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }[];
   // Join fields
   clients?: Client;
   staff_members?: StaffMember;

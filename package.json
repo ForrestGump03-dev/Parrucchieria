@@ -1,7 +1,7 @@
 {
   "name": "root-manager",
   "private": true,
-  "version": "2.5.0",
+  "version": "2.7.0",
   "description": "Root Salon Manager - Gestionale Professionale",
   "author": "Alessio Forestieri",
   "main": "electron/main.cjs",
@@ -70,7 +70,7 @@
       "target": "nsis",
       "executableName": "Root",
       "icon": "build/icon.ico",
-      "artifactName": "${productName} Setup 2.5.${ext}"
+      "artifactName": "${productName} Setup 2.7.${ext}"
     },
     "nsis": {
       "oneClick": false,
