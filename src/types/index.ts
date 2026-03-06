@@ -19,6 +19,13 @@ export interface Product {
     barcode?: string;
   }
 
+export type ProductSold = {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+};
+
 export interface Appointment {
   id: string;
   created_at: string;
@@ -31,12 +38,7 @@ export interface Appointment {
   // New fields for v2.1
   staff_id?: string | null;
   duration?: number; // minutes
-  products_sold?: {
-    id: string;
-    name: string;
-    price: number;
-    quantity: number;
-  }[];
+  products_sold?: ProductSold[];
   // Join fields
   clients?: Client;
   staff_members?: StaffMember;

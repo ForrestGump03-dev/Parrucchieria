@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import type { ProductSold } from '../types';
 import { supabase } from '../lib/supabase';
 import { isSameDay, startOfMonth, endOfMonth, isWithinInterval, subDays, differenceInDays, parse, startOfDay, format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -125,9 +126,8 @@ export function useStats() {
         
         // Calculate Product Revenue
         let productsTotal = 0;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sold = (apt.products_sold as any[]) || [];
-        sold.forEach((p: any) => {
+        const sold = (apt.products_sold as ProductSold[] | undefined) ?? [];
+        sold.forEach((p) => {
             productsTotal += (Number(p.price) * Number(p.quantity));
         });
 
@@ -189,7 +189,7 @@ export function useStats() {
             }
 
             // Period Products
-            sold.forEach((p: any) => {
+            sold.forEach((p) => {
                const pKey = p.name;
                const pVal = Number(p.price) * Number(p.quantity);
                if (!productMap.has(pKey)) productMap.set(pKey, { quantity: 0, revenue: 0 });

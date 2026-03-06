@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Calendar, FileText, Phone, User, Pencil, Trash2, X, Plus, ShoppingBag, Check, Settings, Package, ChevronDown, ChevronRight, StickyNote } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { type Client, type Appointment } from '../types';
+import { type Client, type Appointment, type ProductSold } from '../types';
 import { useClients } from '../hooks/useClients';
 import { useAppointments } from '../hooks/useAppointments';
 import { useAuth } from '../context/AuthContext';
@@ -22,7 +22,7 @@ interface AppointmentFormProps {
 
 interface ProductItem {
     id: string;
-    product: any;
+    product: { id: string; name: string; price: number };
     quantity: number;
 }
 
@@ -431,13 +431,11 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
         g.treatments.add(apt.treatment);
         if (apt.notes) g.notes.add(apt.notes);
         
-        let itemPrice = apt.price || 0;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sold = (apt.products_sold as any[]) || [];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const itemPrice = apt.price || 0;
+        const sold: ProductSold[] = apt.products_sold ?? [];
         let productsTotal = 0;
 
-        sold.forEach((p: any) => {
+        sold.forEach((p) => {
            const qty = p.quantity || 1;
            productsTotal += (Number(p.price) * qty);
            g.productCount += qty;
@@ -843,9 +841,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                                    {group.items.map((item) => {
                                        // Calculate products total if available
                                        let prodTotal = 0;
-                                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                       const sold = (item.products_sold as any[]) || [];
-                                       sold.forEach((p: any) => prodTotal += (Number(p.price) * Number(p.quantity)));
+                                       const sold: ProductSold[] = item.products_sold ?? [];
+                                       sold.forEach((p) => prodTotal += (p.price * p.quantity));
                                        
                                        return (
                                            <div key={item.id} className={`p-4 flex items-center justify-between hover:bg-slate-50 transition-colors ${editingId === item.id ? 'bg-indigo-50/60' : ''}`}>
@@ -858,7 +855,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                                                    
                                                    {sold.length > 0 && (
                                                        <div className="flex flex-wrap gap-1 mb-2">
-                                                           {sold.map((p: any, i: number) => (
+                                                           {sold.map((p, i) => (
                                                                <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-100" title={`€ ${p.price}`}>
                                                                    {p.quantity > 1 && <span className="mr-0.5 opacity-70">x{p.quantity}</span>}
                                                                    {p.name}

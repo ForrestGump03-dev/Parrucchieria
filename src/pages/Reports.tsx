@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStats, type DateRange } from '../hooks/useStats';
 import { TrendingUp, TrendingDown, DollarSign, CreditCard, Award, UserCheck, UserMinus, Filter, ArrowRight, Database, Download, Users, BarChart as BarChartIcon } from 'lucide-react';
+import ClientDetailView from '../components/ClientDetailView';
 import toast from 'react-hot-toast';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, parse, startOfDay, endOfDay, isValid } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -133,6 +134,7 @@ export default function Reports() {
   });
 
   const [clientViewMode, setClientViewMode] = useState<'faith' | 'sleep'>('faith');
+  const [showDetailView, setShowDetailView] = useState(false);
   const [showCustomPicker, setShowCustomPicker] = useState(false);
   const [customDates, setCustomDates] = useState({
     start: format(new Date(), 'yyyy-MM-dd'),
@@ -212,21 +214,35 @@ export default function Reports() {
     );
   }
 
+  if (showDetailView) {
+    return <ClientDetailView range={selectedRange} onClose={() => setShowDetailView(false)} />;
+  }
+
   return (
     <div className="space-y-8 pb-10">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-             <h1 className="text-2xl font-bold text-slate-800">Analisi Finanziaria</h1>
-             <p className="text-slate-500 text-sm">Monitora le performance del tuo salone</p>
-             {import.meta.env.DEV && (
-                <button 
-                  onClick={seedPenetrationTest}
-                  className="mt-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded border border-amber-200 hover:bg-amber-200"
-                >
-                  🛠️ Seed Test (100 Clienti)
-                </button>
-             )}
+          <div className="flex items-start gap-4 flex-wrap">
+            <div>
+               <h1 className="text-2xl font-bold text-slate-800">Analisi Finanziaria</h1>
+               <p className="text-slate-500 text-sm">Monitora le performance del tuo salone</p>
+               {import.meta.env.DEV && (
+                  <button 
+                    onClick={seedPenetrationTest}
+                    className="mt-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded border border-amber-200 hover:bg-amber-200"
+                  >
+                    🛠️ Seed Test (100 Clienti)
+                  </button>
+               )}
+            </div>
+            <button
+              onClick={() => setShowDetailView(true)}
+              className="flex items-center gap-2 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-300 px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm mt-0.5"
+            >
+              <Database size={15} />
+              Registro Dettagliato
+              <ArrowRight size={14} className="text-indigo-400" />
+            </button>
           </div>
           
           <div className="flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm overflow-x-auto">
