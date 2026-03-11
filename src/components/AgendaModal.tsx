@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { X, Save, Clock, UserPlus, ArrowLeft, Trash2, Settings, MessageCircle } from 'lucide-react';
+import { X, Save, Clock, UserPlus, ArrowLeft, Trash2, Settings, Star, Package, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { type Client, type Appointment } from '../types';
 import ClientList from './ClientList';
@@ -32,6 +32,8 @@ interface NewClientFormData {
   first_name: string;
   last_name: string;
   phone: string;
+  email?: string;
+  birth_date?: string;
 }
 
 interface ServiceItem {
@@ -318,14 +320,22 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
     }
   };
 
-  const openWhatsApp = () => {
+  const sendWhatsApp = (type: 'reminder' | 'review' | 'promo') => {
       if (!selectedClient?.phone) return;
-      // Strip formatting, ensure 39
       let clean = selectedClient.phone.replace(/[^0-9]/g, '');
       if (!clean.startsWith('39')) clean = '39' + clean;
       
-      const formattedDate = appointmentToEdit?.date ? format(new Date(appointmentToEdit.date), 'dd/MM/yyyy') : 'data da definire';
-      const msg = `Salve, ricordiamo che il suo appuntamento è previsto per il ${formattedDate} alle ${appointmentToEdit?.start_time}. Per qualsiasi informazione o modifica, non esiti a contattarci. Grazie!`;
+      let msg = '';
+      if (type === 'reminder') {
+          const formattedDate = appointmentToEdit?.date ? format(new Date(appointmentToEdit.date), 'dd/MM/yyyy') : 'presto';
+          const time = appointmentToEdit?.start_time ? ` alle ${appointmentToEdit.start_time}` : '';
+          msg = `Ciao ${selectedClient.first_name}, ti ricordiamo il tuo appuntamento nel nostro salone il ${formattedDate}${time}. Per qualsiasi informazione, non esitare a contattarci! A presto.`;
+      } else if (type === 'review') {
+          msg = `Ciao ${selectedClient.first_name}! Speriamo tu ti sia trovat${selectedClient.first_name.endsWith('a') ? 'a' : 'o'} bene oggi. Ci faresti un enorme favore lasciandoci una recensione su Google? [INSERISCI LINK QUI] Grazie di cuore!`;
+      } else if (type === 'promo') {
+          msg = `Ciao ${selectedClient.first_name}! Abbiamo una novità esclusiva per te in salone. Passa a trovarci o prenota il tuo prossimo appuntamento!`;
+      }
+      
       window.open(`https://wa.me/${clean}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -394,23 +404,42 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Telefono (Opzionale)</label>
-                  <input
-                    {...registerNewClient('phone', { 
-                      required: false,
-                      pattern: {
-                        value: /^[0-9+]*$/,
-                        message: "Solo numeri e '+' sono consentiti"
-                      },
-                      onChange: (e) => {
-                        const clean = e.target.value.replace(/[^0-9+]/g, '');
-                        setValueNewClient('phone', clean); 
-                      }
-                    })}
-                    placeholder="Se disponibile..."
-                    className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Telefono (Opzionale)</label>
+                    <input
+                      {...registerNewClient('phone', { 
+                        required: false,
+                        pattern: {
+                          value: /^[0-9+]*$/,
+                          message: "Solo numeri e '+' sono consentiti"
+                        },
+                        onChange: (e) => {
+                          const clean = e.target.value.replace(/[^0-9+]/g, '');
+                          setValueNewClient('phone', clean); 
+                        }
+                      })}
+                      placeholder="Se disponibile..."
+                      className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Email (Opzionale)</label>
+                    <input
+                      type="email"
+                      {...registerNewClient('email')}
+                      placeholder="mario@example.com"
+                      className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Nascita (Opzionale)</label>
+                    <input
+                      type="date"
+                      {...registerNewClient('birth_date')}
+                      className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700"
+                    />
+                  </div>
                 </div>
                 <div className="pt-4 flex justify-end">
                   <button
@@ -427,20 +456,38 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                 {/* Client Summary */}
                 <div className="bg-slate-50 p-3 rounded-lg flex justify-between items-center">
                   <div>
-                    <div className="text-sm text-slate-500">Cliente Selezionato</div>
-                    <div className="font-semibold text-slate-800 flex items-center gap-2">
+                    <div className="text-sm text-slate-500 mb-1">Cliente Selezionato</div>
+                    <div className="font-semibold text-slate-800 text-lg">
                         {selectedClient?.first_name} {selectedClient?.last_name}
-                        {selectedClient?.phone && (
-                            <button 
-                                type="button" 
-                                onClick={openWhatsApp}
-                                className="text-green-600 hover:text-green-700 bg-green-50 p-1 rounded-full transition-colors"
-                                title="Invia WhatsApp"
-                            >
-                                <MessageCircle size={16} />
-                            </button>
-                        )}
                     </div>
+                    {selectedClient?.phone && selectedClient.phone.replace(/[^0-9+]/g, '').length >= 5 && (
+                       <div className="flex gap-2 mt-2">
+                          <button 
+                            type="button"
+                            onClick={() => sendWhatsApp('reminder')}
+                            className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 p-1.5 rounded-lg transition-colors flex items-center justify-center"
+                            title="Promemoria Appuntamento"
+                          >
+                             <Calendar size={16} />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => sendWhatsApp('review')}
+                            className="bg-blue-100 text-blue-700 hover:bg-blue-200 p-1.5 rounded-lg transition-colors flex items-center justify-center"
+                            title="Richiesta Recensione"
+                          >
+                             <Star size={16} />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => sendWhatsApp('promo')}
+                            className="bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200 p-1.5 rounded-lg transition-colors flex items-center justify-center"
+                            title="Invia Promozione"
+                          >
+                             <Package size={16} />
+                          </button>
+                       </div>
+                    )}
                   </div>
                   <button type="button" onClick={() => setStep('client')} className="text-sm text-indigo-600 hover:underline">
                     Cambia

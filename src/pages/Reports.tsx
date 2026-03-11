@@ -6,8 +6,9 @@ import ClientDetailView from '../components/ClientDetailView';
 import toast from 'react-hot-toast';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, parse, startOfDay, endOfDay, isValid } from 'date-fns';
 import { supabase } from '../lib/supabase';
-import { exportToCsv } from '../lib/utils';
-import ConfirmModal from '../components/ConfirmModal';
+import { createCsvString } from '../lib/utils';
+import { generateExcelReport } from '../utils/generateExcelReport';
+import JSZip from 'jszip';
 import {
   LineChart,
   Line,
@@ -573,22 +574,16 @@ interface BackupSectionProps {
 }
 
 function BackupSection({ range }: BackupSectionProps) {
-    const [loading, setLoading] = useState(false);
-    const [showConfirm, setShowConfirm] = useState(false);
+    const [loadingReport, setLoadingReport] = useState(false);
+    const [loadingZip, setLoadingZip] = useState(false);
 
-    const performBackup = async () => {
-        setLoading(true);
-        setShowConfirm(false);
-        
+    const performReportDownload = async () => {
+        setLoadingReport(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error("Utente non autenticato");
             
-            let filesCount = 0;
-            const dateStr = format(new Date(), 'yyyy-MM-dd_HH-mm');
-
-            // --- 1. USER REPORT (Clean Data for selected range) ---
-            // Fetch appointments for the specific range used in Analysis
+            // --- USER REPORT (Clean Data for selected range) ---
             const { data: reportData, error: reportError } = await supabase
                 .from('appointments')
                 .select('date, start_time, treatment, price, notes, clients(first_name, last_name), staff_members(name)')
@@ -600,24 +595,31 @@ function BackupSection({ range }: BackupSectionProps) {
             if (reportError) throw reportError;
 
             if (reportData && reportData.length > 0) {
-                // Flatten and Translate headers for User
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const userReport = reportData.map((a: any) => ({
-                    'Data': a.date,
-                    'Ora': a.start_time ? a.start_time.slice(0, 5) : '',
-                    'Cliente': a.clients ? `${a.clients.first_name} ${a.clients.last_name}` : 'Cliente Eliminato',
-                    'Staff': a.staff_members ? a.staff_members.name : '',
-                    'Trattamento': a.treatment,
-                    'Prezzo': a.price,
-                    'Note': a.notes || ''
-                }));
-                
-                // Clean label e.g. "Questa Settimana" -> "Questa_Settimana"
-                const rangeLabelFormatted = range.label.replace(/\s+/g, '_');
-                if(exportToCsv(`Report_Vendite_${rangeLabelFormatted}_${dateStr}.csv`, userReport)) filesCount++;
+                await generateExcelReport(reportData, range.label, range.start, range.end);
+                toast.success('Report Excel creato con successo!');
+            } else {
+                 toast("Nessun dato trovato per questo periodo.", { icon: 'ℹ️' });
             }
+        } catch (err: unknown) {
+            console.error(err);
+            const msg = err instanceof Error ? err.message : 'Errore sconosciuto';
+            toast.error("Errore durante l'esportazione: " + msg);
+        } finally {
+            setLoadingReport(false);
+        }
+    };
 
-            // --- 2. TECHNICAL BACKUP (Full Dump) ---
+    const performBackup = async () => {
+        setLoadingZip(true);
+        
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error("Utente non autenticato");
+            
+            const dateStr = format(new Date(), 'yyyy-MM-dd_HH-mm');
+            const zip = new JSZip();
+
+            // --- TECHNICAL BACKUP (Full Dump) ---
             
             // Clients
             const { data: clients, error: clientError } = await supabase
@@ -636,8 +638,14 @@ function BackupSection({ range }: BackupSectionProps) {
 
             if (apptError) throw apptError;
             
+            let hasFiles = false;
+
             if (clients && clients.length > 0) {
-                 if(exportToCsv(`BACKUP_TECNICO_Clienti_${dateStr}.csv`, clients)) filesCount++;
+                 const csvStr = createCsvString(clients);
+                 if (csvStr) {
+                     zip.file(`BACKUP_Clienti_${dateStr}.csv`, csvStr);
+                     hasFiles = true;
+                 }
             }
             
             if (appointments && appointments.length > 0) {
@@ -655,11 +663,23 @@ function BackupSection({ range }: BackupSectionProps) {
                      created_at: a.created_at,
                      user_id: a.user_id
                  }));
-                 if(exportToCsv(`BACKUP_TECNICO_Storico_${dateStr}.csv`, flatAppts)) filesCount++;
+                 const csvStr = createCsvString(flatAppts);
+                 if (csvStr) {
+                     zip.file(`BACKUP_Storico_${dateStr}.csv`, csvStr);
+                     hasFiles = true;
+                 }
             }
 
-            if (filesCount > 0) {
-                 toast.success(`Download completato! ${filesCount} file scaricati.`);
+            if (hasFiles) {
+                 const content = await zip.generateAsync({ type: 'blob' });
+                 const url = URL.createObjectURL(content);
+                 const link = document.createElement('a');
+                 link.href = url;
+                 link.download = `Backup_Salone_${dateStr}.zip`;
+                 document.body.appendChild(link);
+                 link.click();
+                 document.body.removeChild(link);
+                 toast.success(`Backup di sicurezza salvato!`);
                  localStorage.setItem('lastBackup', Date.now().toString());
             } else {
                  toast("Nessun dato trovato da esportare.", { icon: 'ℹ️' });
@@ -670,52 +690,64 @@ function BackupSection({ range }: BackupSectionProps) {
             const msg = err instanceof Error ? err.message : 'Errore sconosciuto';
             toast.error("Errore durante il backup: " + msg);
         } finally {
-            setLoading(false);
-            // Fix: Restore window focus after download dialogs close to prevent "frozen" inputs
-            setTimeout(() => {
-                 window.focus();
-                 document.body.focus();
-            }, 1000);
+            setLoadingZip(false);
         }
     };
 
     return (
         <div className="mt-12 border-t-2 border-slate-100 pt-8 pb-12">
-            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="flex items-start gap-4">
-                    <div className="p-3 bg-white rounded-full text-indigo-600 shadow-sm mt-1">
-                        <Database size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-lg font-bold text-slate-800">Centro di Sicurezza Dati & Report</h3>
-                        <p className="text-slate-600 text-sm max-w-xl mt-1">
-                            Scarica i tuoi dati in formato Excel. Il download include:<br/> 
-                            1. <b>Report Analisi</b> (Dati dell'intervallo selezionato sopra)<br/>
-                            2. <b>Backup Tecnico</b> (Copia completa per ripristino o sviluppatore)
-                        </p>
-                        
-                    </div>
-                </div>
-                
-                <button 
-                  onClick={() => setShowConfirm(true)}
-                  disabled={loading}
-                  className="whitespace-nowrap flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-md transition-all disabled:opacity-70"
-                >
-                    {loading ? <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <Download size={20} />}
-                    Scarica Report & Backup
-                </button>
+            {/* Status Indicatore Cloud */}
+            <div className="mb-6 flex items-center gap-2 text-sm text-slate-500 font-medium bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 w-max">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                </span>
+                Stato Database: Sincronizzato in Cloud e Protetto
             </div>
 
-            <ConfirmModal 
-                isOpen={showConfirm}
-                title="Download Completo"
-                message={`Stai per scaricare i dati per il periodo: ${range.label}. Verranno generati 3 file (Report Vendite + Backup Tecnico completo). Procedere?`}
-                confirmText="Sì, scarica tutto"
-                cancelText="Annulla"
-                onConfirm={performBackup}
-                onCancel={() => setShowConfirm(false)}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Pannello 1: Export Commercialista */}
+                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 flex flex-col justify-between items-start gap-4">
+                    <div>
+                        <div className="p-3 bg-white rounded-lg text-indigo-600 shadow-sm w-max mb-3">
+                            <BarChartIcon size={24} />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-800">Report Fiscale & Storico</h3>
+                        <p className="text-slate-600 text-sm mt-1">
+                            Scarica un foglio Excel (XLSX) dettagliato delle vendite nel periodo selezionato ({range.label}). Impaginato e pronto da stampare o inviare al commercialista.
+                        </p>
+                    </div>
+                    <button 
+                      onClick={performReportDownload}
+                      disabled={loadingReport}
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-all disabled:opacity-70"
+                    >
+                        {loadingReport ? <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> : <Download size={18} />}
+                        Esporta Report
+                    </button>
+                </div>
+
+                {/* Pannello 2: Backup di Sicurezza Tecnico */}
+                <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between items-start gap-4 shadow-sm">
+                    <div>
+                        <div className="p-3 bg-slate-50 rounded-lg text-slate-600 border border-slate-200 shadow-sm w-max mb-3">
+                            <Database size={24} />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-800">Backup di Sicurezza (ZIP)</h3>
+                        <p className="text-slate-500 text-sm mt-1">
+                            Scarica un archivio completo contenente tutti i clienti e lo storico. Da usare in caso di problemi tecnici.
+                        </p>
+                    </div>
+                    <button 
+                      onClick={performBackup}
+                      disabled={loadingZip}
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded-lg shadow-sm transition-all disabled:opacity-70"
+                    >
+                        {loadingZip ? <div className="animate-spin w-4 h-4 border-2 border-slate-600/30 border-t-slate-600 rounded-full" /> : <Database size={18} />}
+                        Crea Backup Completo
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }

@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Package, Calendar, Users, BarChart3, LogOut, Bell, Lock } from 'lucide-react';
+import { Package, Calendar, Users, BarChart3, LogOut, Bell, Lock, Megaphone } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
@@ -36,6 +36,7 @@ export default function MainLayout() {
     { path: '/clients', label: 'Clienti & Cassa', icon: Users },
     { path: '/inventory', label: 'Magazzino', icon: Package },
     { path: '/reports', label: 'Report & Analisi', icon: BarChart3 },
+    { path: '/marketing', label: 'Marketing & IA', icon: Megaphone },
   ];
 
   return (

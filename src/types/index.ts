@@ -4,6 +4,8 @@ export interface Client {
   first_name: string;
   last_name: string;
   phone: string;
+  email?: string | null;
+  birth_date?: string | null;
 }
 
 export interface Product {

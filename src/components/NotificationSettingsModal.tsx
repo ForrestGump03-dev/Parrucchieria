@@ -1,4 +1,4 @@
-import { X, Bell, Database } from 'lucide-react';
+import { X, Bell, Database, Users } from 'lucide-react';
 import { type NotificationSettings } from '../hooks/useReminders';
 
 interface NotificationSettingsModalProps {
@@ -66,6 +66,28 @@ export default function NotificationSettingsModal({
                        </select>
                    </div>
                )}
+            </div>
+
+            {/* Winback Section */}
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+               <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+                   <Users size={16} className="text-amber-500" />
+                   Scadenza Clienti da Recuperare
+               </h3>
+               
+               <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-600 w-2/3 pr-2">Mostra i clienti che non prenotano da:</span>
+                  <select 
+                       value={settings.winbackDays || 60}
+                       onChange={(e) => onUpdate({ winbackDays: Number(e.target.value) })}
+                       className="w-1/3 p-2 border border-slate-300 rounded-lg text-sm bg-slate-50 font-medium"
+                  >
+                      <option value={30}>30 giorni</option>
+                      <option value={60}>60 giorni</option>
+                      <option value={90}>90 giorni</option>
+                      <option value={120}>120 giorni</option>
+                  </select>
+               </div>
             </div>
         </div>
       </div>

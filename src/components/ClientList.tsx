@@ -3,6 +3,8 @@ import { Search, User, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { type Client } from '../types';
 import { useClients } from '../hooks/useClients';
+import { useWinback } from '../hooks/useWinback';
+import { useReminders } from '../hooks/useReminders';
 import ConfirmModal from './ConfirmModal';
 
 interface ClientListProps {
@@ -53,6 +55,19 @@ export default function ClientList({ clients, onSelect, selectedClientId, loadin
     });
   };
 
+  const { settings } = useReminders();
+  const { candidates, loading: winbackLoading } = useWinback(settings.winbackDays || 60);
+  const [activeTab, setActiveTab] = useState<'all' | 'winback'>('all');
+
+  const displayedClients = activeTab === 'all' ? filteredClients : candidates.filter((client) => {
+    const term = search.toLowerCase();
+    return (
+      client.first_name.toLowerCase().includes(term) ||
+      client.last_name.toLowerCase().includes(term) ||
+      client.phone.includes(term)
+    );
+  });
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col overflow-hidden">
       <div className="p-4 border-b border-slate-200 bg-slate-50">
@@ -69,38 +84,59 @@ export default function ClientList({ clients, onSelect, selectedClientId, loadin
         </div>
       </div>
 
+      <div className="flex bg-slate-100 p-1 mx-4 mt-2 rounded-lg gap-1">
+         <button 
+            onClick={() => setActiveTab('all')}
+            className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${activeTab === 'all' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
+         >
+            Tutti i Clienti
+         </button>
+         <button 
+            onClick={() => setActiveTab('winback')}
+            className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${activeTab === 'winback' ? 'bg-white shadow-sm text-amber-700' : 'text-slate-500 hover:text-slate-700'}`}
+         >
+            Da Recuperare {candidates.length > 0 && `(${candidates.length})`}
+         </button>
+      </div>
+
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {loading ? (
+        {(loading || (activeTab === 'winback' && winbackLoading)) ? (
            <div className="p-4 text-center text-slate-500 text-sm">Caricamento...</div>
-        ) : filteredClients.length === 0 ? (
-          <div className="p-4 text-center text-slate-500 text-sm">Nessun cliente trovato</div>
+        ) : displayedClients.length === 0 ? (
+          <div className="p-4 text-center text-slate-500 text-sm">
+             {activeTab === 'winback' ? 'Ottimo lavoro! Nessun cliente da recuperare.' : 'Nessun cliente trovato'}
+          </div>
         ) : (
-          filteredClients.map((client) => (
+          displayedClients.map((client) => (
             <div
               key={client.id}
               className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors group ${
                 selectedClientId === client.id
-                  ? 'bg-indigo-50 ring-1 ring-indigo-200'
+                  ? (activeTab === 'winback' ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-indigo-50 ring-1 ring-indigo-200')
                   : 'hover:bg-slate-50'
               }`}
             >
             <button
               onClick={() => onSelect(client)}
-              className={`flex-1 text-left flex items-center gap-3 ${
-                selectedClientId === client.id
-                  ? 'text-indigo-700'
-                  : 'text-slate-700'
-              }`}
+              className={`flex-1 text-left flex flex-col`}
             >
-              <div className={`p-2 rounded-full ${selectedClientId === client.id ? 'bg-indigo-100' : 'bg-slate-100'}`}>
-                <User size={18} />
+              <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-full ${selectedClientId === client.id ? (activeTab === 'winback' ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600') : 'bg-slate-100 text-slate-500'}`}>
+                    <User size={18} />
+                  </div>
+                  <div>
+                    <p className={`font-medium leading-tight ${selectedClientId === client.id ? (activeTab === 'winback' ? 'text-amber-800' : 'text-indigo-700') : 'text-slate-700'}`}>
+                      {client.first_name} {client.last_name}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">{client.phone || 'Nessun telefono'}</p>
+                  </div>
               </div>
-              <div>
-                <p className="font-medium leading-tight">
-                  {client.first_name} {client.last_name}
-                </p>
-                <p className="text-xs opacity-70 mt-0.5">{client.phone}</p>
-              </div>
+              {activeTab === 'winback' && 'days_since' in client && (
+                  <div className="mt-2 ml-10 text-[10px] uppercase font-bold text-amber-600 bg-amber-50 self-start px-2 py-0.5 rounded border border-amber-100">
+                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                     Manca da {(client as any).days_since} giorni
+                  </div>
+              )}
             </button>
             <button
                 onClick={(e) => handleDelete(e, client.id)}

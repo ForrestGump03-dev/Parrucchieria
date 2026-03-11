@@ -14,6 +14,9 @@ export interface NotificationSettings {
   // Backup Settings
   backupReminderEnabled: boolean;
   backupIntervalDays: number;
+
+  // Winback Settings
+  winbackDays: number;
 }
 
 const DEFAULT_SETTINGS: NotificationSettings = {
@@ -22,7 +25,8 @@ const DEFAULT_SETTINGS: NotificationSettings = {
   sound: true,
   checkInterval: 60,
   backupReminderEnabled: true,
-  backupIntervalDays: 14
+  backupIntervalDays: 14,
+  winbackDays: 60
 };
 
 export function useReminders() {
@@ -30,7 +34,7 @@ export function useReminders() {
   const { addNotification } = useNotifications();
   const [settings, setSettings] = useState<NotificationSettings>(() => {
     const saved = localStorage.getItem('notificationSettings');
-    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
   });
 
   const [notifiedIds, setNotifiedIds] = useState<Set<string>>(new Set());

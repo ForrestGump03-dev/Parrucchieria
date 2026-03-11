@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { Calendar, FileText, Phone, User, Pencil, Trash2, X, Plus, ShoppingBag, Check, Settings, Package, ChevronDown, ChevronRight, StickyNote } from 'lucide-react';
+import { Calendar, FileText, Phone, User, Pencil, Trash2, X, Plus, ShoppingBag, Check, Settings, Package, ChevronDown, ChevronRight, StickyNote, MessageCircle, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { type Client, type Appointment, type ProductSold } from '../types';
 import { useClients } from '../hooks/useClients';
@@ -30,6 +30,8 @@ interface FormData {
   first_name: string;
   last_name: string;
   phone: string;
+  email?: string;
+  birth_date?: string;
   date: string;
   notes?: string;
   staff_id?: string;
@@ -42,7 +44,7 @@ interface ServiceItem {
 }
 
 export default function AppointmentForm({ selectedClient, onClientUpdated, onSelectExistingClient }: AppointmentFormProps) {
-  const { register, handleSubmit, setValue, reset, watch } = useForm<FormData>({
+  const { register, handleSubmit, setValue, reset, watch, getValues } = useForm<FormData>({
     defaultValues: {
       date: format(new Date(), 'yyyy-MM-dd'),
     }
@@ -180,6 +182,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
         setValue('first_name', selectedClient.first_name);
         setValue('last_name', selectedClient.last_name);
         setValue('phone', selectedClient.phone);
+        setValue('email', selectedClient.email || '');
+        setValue('birth_date', selectedClient.birth_date || '');
         setValue('date', format(new Date(), 'yyyy-MM-dd'));
         // Load staff from last appointment? No, simplified.
         setSelectedServices([]);
@@ -291,6 +295,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
              first_name: data.first_name,
              last_name: data.last_name,
              phone: data.phone || '', // Check valid value
+             email: data.email || null,
+             birth_date: data.birth_date || null,
              user_id: user.id
          }]).select().single();
          
@@ -368,10 +374,10 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
 
   const saveClientChanges = async () => {
     if (!selectedClient) return;
-    const currentValues = watch();
+    const currentValues = getValues();
 
-    if (!currentValues.first_name || !currentValues.last_name || !currentValues.phone) {
-       toast.error("Tutti i campi sono obbligatori");
+    if (!currentValues.first_name || !currentValues.last_name) {
+       toast.error("Nome e cognome sono obbligatori");
        return;
     }
 
@@ -379,7 +385,9 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
       await updateClient(selectedClient.id, {
         first_name: currentValues.first_name,
         last_name: currentValues.last_name,
-        phone: currentValues.phone
+        phone: currentValues.phone,
+        email: currentValues.email || null,
+        birth_date: currentValues.birth_date || null
       });
       toast.success("Cliente aggiornato!");
       setIsEditingClient(false);
@@ -446,6 +454,23 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
 
     return Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [history]);
+
+  const sendWhatsApp = (type: 'reminder' | 'review' | 'promo') => {
+      if (!selectedClient || !selectedClient.phone) return;
+      const cleanPhone = selectedClient.phone.replace(/[^0-9+]/g, '');
+      if (cleanPhone.length < 5) return;
+      
+      let msg = '';
+      if (type === 'reminder') {
+          msg = `Ciao ${selectedClient.first_name}, ti ricordiamo che ti aspettiamo presto nel nostro salone! A presto!`;
+      } else if (type === 'review') {
+          msg = `Ciao ${selectedClient.first_name}! Speriamo tu ti sia trovat${selectedClient.first_name.endsWith('a') ? 'a' : 'o'} bene oggi. Ci faresti un enorme favore lasciandoci una recensione su Google? [INSERISCI LINK QUI] Grazie di cuore!`;
+      } else if (type === 'promo') {
+          msg = `Ciao ${selectedClient.first_name}! Abbiamo una novità esclusiva per te in salone. Passa a trovarci o prenota il tuo prossimo appuntamento!`;
+      }
+      
+      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
 
   return (
     <div className="space-y-6">
@@ -549,30 +574,88 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Telefono (Opzionale)</label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Telefono (Opzionale)</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    {...register('phone', { 
+                      required: false,
+                      pattern: {
+                        value: /^[0-9+]*$/,
+                        message: "Solo numeri e '+' sono consentiti"
+                      },
+                      onChange: (e) => {
+                         const clean = e.target.value.replace(/[^0-9+]/g, '');
+                         setValue('phone', clean); 
+                      }
+                    })}
+                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
+                    placeholder="Se disponibile..."
+                    readOnly={Boolean(selectedClient && !isEditingClient)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Email (Opzionale)</label>
                 <input
-                  {...register('phone', { 
-                    required: false,
-                    pattern: {
-                      value: /^[0-9+]*$/,
-                      message: "Solo numeri e '+' sono consentiti"
-                    },
-                    onChange: (e) => {
-                       const clean = e.target.value.replace(/[^0-9+]/g, '');
-                       setValue('phone', clean); 
-                    }
-                  })}
-                  className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
-                  placeholder="Se disponibile..."
+                  type="email"
+                  {...register('email')}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
+                  placeholder="mario@example.com"
+                  readOnly={Boolean(selectedClient && !isEditingClient)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Data di Nascita (Opzionale)</label>
+                <input
+                  type="date"
+                  {...register('birth_date')}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500 text-slate-700"
                   readOnly={Boolean(selectedClient && !isEditingClient)}
                 />
               </div>
             </div>
             
-             <div>
+            {/* WhatsApp Quick Actions */}
+            {selectedClient && selectedClient.phone && selectedClient.phone.replace(/[^0-9+]/g, '').length >= 5 && !isEditingClient && !editingId && (
+              <div className="md:col-span-2 pt-3 border-t border-slate-100 mt-1">
+                 <h4 className="text-[11px] font-bold text-slate-400 uppercase flex items-center gap-1 mb-2.5">
+                    <MessageCircle size={13} className="text-emerald-500" /> Azioni Rapide WhatsApp
+                 </h4>
+                 <div className="flex flex-wrap gap-2">
+                    <button 
+                      type="button"
+                      onClick={() => sendWhatsApp('reminder')}
+                      className="text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm"
+                    >
+                       <Calendar size={13} />
+                       Promemoria
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => sendWhatsApp('review')}
+                      className="text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm"
+                    >
+                       <Star size={13} />
+                       Richiedi Recensione
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => sendWhatsApp('promo')}
+                      className="text-xs font-semibold bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 border border-fuchsia-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm"
+                    >
+                       <Package size={13} />
+                       Invia Promo
+                    </button>
+                 </div>
+              </div>
+            )}
+            
+             <div className="md:col-span-2 pt-2 border-t border-slate-100">
               <label className="block text-sm font-medium text-slate-700 mb-1">Data Registrazione</label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />

@@ -34,9 +34,6 @@ export function useAppointments() {
       .from('appointments')
       .select('*')
       .eq('client_id', clientId)
-      // Modifica fondamentale: mostra solo se hanno un prezzo (quindi pagati/registrati in cassa)
-      // OPPURE se la data è passata. Ma la richiesta specifica "solo se registro il trattamento in cassa".
-      // Assumiamo che "registrato in cassa" significhi price != null (o > 0 nel vecchio schema, ma ora stiamo usando null per quelli in agenda)
       .not('price', 'is', null) 
       .order('date', { ascending: false });
 

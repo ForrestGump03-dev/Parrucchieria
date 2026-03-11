@@ -5,15 +5,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function exportToCsv(filename: string, rows: object[]) {
+export function createCsvString(rows: object[]): string | null {
   if (!rows || !rows.length) {
-    console.warn("ExportToCsv: Nessun dato da esportare");
-    return false;
+    return null;
   }
   const separator = ',';
   const keys = Object.keys(rows[0]);
-  const csvContent =
-    keys.join(separator) +
+  return keys.join(separator) +
     '\n' +
     rows.map(row => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,6 +27,14 @@ export function exportToCsv(filename: string, rows: object[]) {
         return cell;
       }).join(separator);
     }).join('\n');
+}
+
+export function exportToCsv(filename: string, rows: object[]) {
+  const csvContent = createCsvString(rows);
+  if (!csvContent) {
+    console.warn("ExportToCsv: Nessun dato da esportare");
+    return false;
+  }
 
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   
