@@ -164,7 +164,8 @@ export function useDetailedReport() {
             .slice(0, 3)
             .map(([name, count]) => ({ name, count }));
           const totalSpent = entry.servicesRevenue + entry.productsRevenue;
-          const visits = sortedApts.length;
+          const uniqueDates = new Set(sortedApts.map(a => a.date));
+          const visits = uniqueDates.size;
 
           return {
             clientId,

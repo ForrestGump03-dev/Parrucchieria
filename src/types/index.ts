@@ -6,6 +6,10 @@ export interface Client {
   phone: string;
   email?: string | null;
   birth_date?: string | null;
+  is_active?: boolean;
+  total_visits?: number;
+  total_spent?: number;
+  last_visit?: string | null;
 }
 
 export interface Product {

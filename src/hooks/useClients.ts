@@ -16,6 +16,7 @@ export function useClients() {
       const { data, error } = await supabase
         .from('clients')
         .select('*')
+        .eq('is_active', true)
         .order('first_name', { ascending: true });
 
       if (error) throw error;
@@ -66,10 +67,7 @@ export function useClients() {
   }, [user]);
 
   const deleteClient = useCallback(async (id: string) => {
-    // Prima eliminiamo gli appuntamenti collegati (altrimenti il DB dà errore per vincoli)
-    await supabase.from('appointments').delete().eq('client_id', id);
-    
-    const { error } = await supabase.from('clients').delete().eq('id', id);
+    const { error } = await supabase.from('clients').update({ is_active: false }).eq('id', id);
     if (error) throw error;
     
     setClients((prev) => prev.filter(c => c.id !== id));
