@@ -22,7 +22,8 @@ export default function MainLayout() {
 
   // Listen for Password Recovery event to force open the change password modal
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any, _session: any) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordModalOpen(true);
         toast('Imposta una nuova password per completare il recupero.', { icon: '🔑' });
