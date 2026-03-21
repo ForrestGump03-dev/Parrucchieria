@@ -7,7 +7,7 @@
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -28,6 +28,7 @@
     "react": "^19.2.0",
     "react-big-calendar": "^1.19.4",
     "react-dom": "^19.2.0",
+    "react-helmet-async": "^3.0.0",
     "react-hook-form": "^7.71.1",
     "react-hot-toast": "^2.6.0",
     "react-qr-code": "^2.0.18",

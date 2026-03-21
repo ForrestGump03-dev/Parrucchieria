@@ -60,7 +60,7 @@ export default function Marketing() {
   const qrRef = useRef<HTMLDivElement>(null);
   
   // URL pubblico
-  const publicQrUrl = user ? `${window.location.origin}/#/qr/${user.id}` : '';
+  const publicQrUrl = user ? `${window.location.origin}/qr/${user.id}` : '';
 
   const handlePrintQr = () => {
      if (!qrRef.current) return;

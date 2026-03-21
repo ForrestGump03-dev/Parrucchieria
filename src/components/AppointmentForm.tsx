@@ -557,7 +557,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                   <input
                     {...register('first_name', { required: true })}
-                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
+                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white read-only:bg-slate-50 read-only:text-slate-500"
                     placeholder="Nome"
                     readOnly={Boolean(selectedClient && !isEditingClient)}
                   />
@@ -567,7 +567,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                 <label className="block text-sm font-medium text-slate-700 mb-1">Cognome</label>
                 <input
                   {...register('last_name', { required: true })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white read-only:bg-slate-50 read-only:text-slate-500"
                   placeholder="Cognome"
                   readOnly={Boolean(selectedClient && !isEditingClient)}
                 />

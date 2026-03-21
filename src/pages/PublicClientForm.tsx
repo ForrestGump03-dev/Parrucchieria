@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import toast from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { UserCheck, CheckCircle, RefreshCcw, Sparkles } from 'lucide-react';
 import { useParams } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 
 const publicClientSchema = z.object({
   first_name: z.string().min(2, 'Il nome deve avere almeno 2 caratteri'),
@@ -27,81 +28,26 @@ export default function PublicClientForm() {
   });
 
   const onSubmit = async (data: PublicClientFormType) => {
-    if (!salonId) {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!salonId || !uuidRegex.test(salonId)) {
       toast.error('Link QR Code non valido. Contatta il salone.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // 1. Controlla se il cliente esiste già per questo salone (SOLO tramite telefono per evitare duplicati da errori di battitura sui nomi)
-      // Estraiamo solo i numeri e prendiamo gli ultimi 9 (spesso i numeri italiani sono di 10, ma 9 è più sicuro per match parziali)
-      const cleanSearchPhone = data.phone.replace(/\D/g, '').slice(-9);
+      const { error: rpcError } = await supabase.rpc('public_register_client', {
+        p_salon_id: salonId,
+        p_first_name: data.first_name,
+        p_last_name: data.last_name,
+        p_phone: data.phone,
+        p_email: data.email || null,
+        p_birth_date: data.birth_date || null
+      });
+
+      if (rpcError) throw rpcError;
       
-      const { data: existingClients, error: searchError } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('user_id', salonId)
-        .ilike('phone', `%${cleanSearchPhone}%`);
-
-      if (searchError) throw searchError;
-
-      let matchedClient = null;
-
-      if (existingClients && existingClients.length > 0) {
-          // Match by phone
-          matchedClient = existingClients[0];
-      } else {
-          // Fallback: match EXACTLY by first_name and last_name (case-insensitive) 
-          // This catches users who changed their phone number but entered the exact same name
-          const { data: nameMatchClients, error: nameError } = await supabase
-            .from('clients')
-            .select('*')
-            .eq('user_id', salonId)
-            .ilike('first_name', data.first_name)
-            .ilike('last_name', data.last_name);
-            
-          if (!nameError && nameMatchClients && nameMatchClients.length === 1) {
-              // Only match if there is exactly ONE person with that name to avoid mixing up "Maria Rossi"
-              matchedClient = nameMatchClients[0];
-          }
-      }
-
-      if (matchedClient) {
-          // Aggiorna il cliente esistente
-          const clientId = matchedClient.id;
-          const { error: updateError } = await supabase
-              .from('clients')
-              .update({
-                  first_name: data.first_name, // Sovrascrive (utile se il parrucchiere aveva segnato un nomignolo)
-                  last_name: data.last_name,
-                  phone: data.phone, // Aggiorna numero di telefono in caso la ricerca per nome abbia avuto successo
-                  email: data.email || null,
-                  birth_date: data.birth_date || null,
-                  // Tieni intatto total_visits e spent e last_visit
-              })
-              .eq('id', clientId);
-          
-          if (updateError) throw updateError;
-          setIsSubmitted(true);
-      } else {
-          // Inserisci un nuovo cliente
-          const { error: insertError } = await supabase
-              .from('clients')
-              .insert([{
-                  user_id: salonId,
-                  first_name: data.first_name,
-                  last_name: data.last_name,
-                  phone: data.phone,
-                  email: data.email || null,
-                  birth_date: data.birth_date || null,
-                  total_visits: 0,
-                  total_spent: 0
-              }]);
-          
-          if (insertError) throw insertError;
-          setIsSubmitted(true);
-      }
+      setIsSubmitted(true);
 
     } catch (err: unknown) {
       console.error(err);
@@ -114,6 +60,9 @@ export default function PublicClientForm() {
   if (isSubmitted) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <Helmet>
+          <title>Registrazione Completata | Root</title>
+        </Helmet>
         <div className="bg-white max-w-md w-full rounded-2xl shadow-xl overflow-hidden text-center p-8">
             <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto mb-6">
                 <CheckCircle size={40} />
@@ -136,7 +85,11 @@ export default function PublicClientForm() {
 
   return (
     <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center p-4">
-      
+      <Toaster position="top-center" />
+      <Helmet>
+        <title>Nuova Registrazione Cliente</title>
+        <meta name="description" content="Iscriviti subito al nostro salone." />
+      </Helmet>
       {/* Dynamic Background Effects */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/20 rounded-full blur-[120px]"></div>

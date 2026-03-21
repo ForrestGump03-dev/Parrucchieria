@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Lock, Mail, Loader2, HelpCircle } from 'lucide-react';
 import ForgotPasswordModal from '../components/ForgotPasswordModal';
+import { Helmet } from 'react-helmet-async';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -40,6 +41,9 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+      <Helmet>
+        <title>Login | Root Salon Manager</title>
+      </Helmet>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
         {/* Brand Header */}
         <div className="bg-indigo-600 p-8 text-center">
@@ -70,6 +74,7 @@ export default function Login() {
                      onChange={(e) => setEmail(e.target.value)}
                      className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                      placeholder="nome@esempio.com"
+                     autoComplete="email"
                      required
                    />
                 </div>
@@ -85,6 +90,7 @@ export default function Login() {
                      onChange={(e) => setPassword(e.target.value)}
                      className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                      placeholder="••••••••"
+                     autoComplete="current-password"
                      required
                    />
                 </div>

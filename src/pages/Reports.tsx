@@ -32,16 +32,28 @@ export default function Reports() {
     
     const toastId = toast.loading("Generazione dati test...");
     try {
-      // 1. Genera dati clienti
-      const prefix = "TestRep";
-      const targetPhones: string[] = [];
+      // Nomi finti realistici per migliorare la UX del seed
+      const firstNames = ['Giulia', 'Sofia', 'Martina', 'Francesco', 'Alessandro', 'Marco', 'Laura', 'Anna', 'Luca', 'Matteo', 'Chiara', 'Sara', 'Elena', 'Andrea', 'Davide'];
+      const lastNames = ['Rossi', 'Russo', 'Ferrari', 'Esposito', 'Bianchi', 'Romano', 'Colombo', 'Ricci', 'Marino', 'Greco', 'Bruno', 'Gallo', 'Conti', 'De Luca', 'Costa'];
+
       const clientsBatch = Array.from({ length: 100 }).map((_, i) => {
-        const phone = `555${String(i).padStart(7, '0')}`;
+        const phone = `333${String(i).padStart(7, '0')}`;
         targetPhones.push(phone);
+
+        const fName = firstNames[Math.floor(Math.random() * firstNames.length)];
+        const lName = lastNames[Math.floor(Math.random() * lastNames.length)];
+        
+        // Random birth date (age 18-60)
+        const year = 2006 - Math.floor(Math.random() * 42);
+        const month = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
+        const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0');
+
         return {
-          first_name: prefix,
-          last_name: `User${i}`,
+          first_name: fName,
+          last_name: `${lName} (Test)`,
           phone: phone,
+          email: `${fName.toLowerCase()}.${lName.toLowerCase()}${year}@example.test`,
+          birth_date: `${year}-${month}-${day}`,
           user_id: user.id
         };
       });

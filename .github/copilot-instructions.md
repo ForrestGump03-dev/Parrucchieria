@@ -18,7 +18,8 @@
 | @supabase/supabase-js | ^2.90.1 | Backend BaaS (auth + DB) |
 | Tailwind CSS | ^4.1.18 | Styling utility-first (Vite plugin) |
 | TypeScript | ~5.9.3 | Linguaggio — strict mode |
-| react-router-dom | ^7.12.0 | Routing (HashRouter — obbligatorio per Electron) |
+| react-router-dom | ^7.12.0 | Routing (`BrowserRouter` per Web App) |
+| react-helmet-async | ^2.0.5 | SEO e titoli dinamici per PWA |
 | date-fns | ^4.1.0 | Date (locale `it` ovunque) |
 | react-hook-form | ^7.71.1 | Gestione form |
 | zod | ^4.3.5 | Schema validation |
@@ -45,7 +46,7 @@
 
 ### Routing
 
-Usa **`HashRouter`** (non `BrowserRouter`) — obbligatorio perché Electron carica file locali senza server HTTP.
+Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile con il deploy su Web / PWA.
 
 | Path | Componente | Label sidebar |
 |------|-----------|---------------|
@@ -53,6 +54,8 @@ Usa **`HashRouter`** (non `BrowserRouter`) — obbligatorio perché Electron car
 | `/clients` | `<Clients />` | Clienti & Cassa |
 | `/inventory` | `<Inventory />` | Magazzino |
 | `/reports` | `<Reports />` | Report & Analisi |
+| `/qr/:salonId` | `<PublicClientForm />` | Form Pubblico (Accesso QR) |
+| `/marketing`| `<Marketing />` | Marketing & IA |
 | `/login` | `<Login />` | — (solo se non autenticato) |
 
 ### Supabase & RLS (CRITICO)
@@ -60,6 +63,7 @@ Usa **`HashRouter`** (non `BrowserRouter`) — obbligatorio perché Electron car
 - Tutte le tabelle hanno **Row Level Security** abilitata.
 - **Letture**: filtrate automaticamente dal token Supabase dell'utente. Non serve filtro manuale per `user_id`.
 - **Scritture**: iniettare **SEMPRE** `user_id: user.id` nel payload di ogni `insert`. Senza questo i dati non vengono salvati (RLS blocca la riga).
+- **Form Pubblici e Utenti Anonimi (ANTI-IDOR)**: Poiché le policy RLS bloccano gli inserimenti/modifiche per il ruolo `anon`, la pagina di registrazione pubblica (QR Code) non invia query dirette via Supabase JS. Utilizza invece una **Postgres Function (`SECURITY DEFINER`)** chiamata `public_register_client` che il client invoca tramite `supabase.rpc()`. Questa funzione si occupa in sicurezza dell'Anti-Duplicati prima di effettuare operazioni di INSERT/UPDATE sicure bypassando l'RLS per gli utenti non loggati.
 - **Accesso utente**: `const { user } = useAuth()` — non chiamare Supabase direttamente nei componenti.
 - **Variabili d'ambiente**: `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` nel file `.env`. Il client è in `src/lib/supabase.ts`.
 
