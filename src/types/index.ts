@@ -7,6 +7,7 @@ export interface Client {
   email?: string | null;
   birth_date?: string | null;
   is_active?: boolean;
+  is_vip?: boolean;
   total_visits?: number;
   total_spent?: number;
   last_visit?: string | null;

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Copy, Sparkles, MessageCircle, Instagram, Check, ExternalLink, Bot, Printer, QrCode, X, Smartphone } from 'lucide-react';
+import { Copy, Sparkles, MessageCircle, Instagram, Check, ExternalLink, Printer, QrCode, X, Smartphone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import QRCode from 'react-qr-code';
 import toast from 'react-hot-toast';
@@ -54,7 +54,6 @@ export default function Marketing() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'all' | 'social' | 'whatsapp'>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [promptIdea, setPromptIdea] = useState('');
   
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const qrRef = useRef<HTMLDivElement>(null);
@@ -75,21 +74,6 @@ export default function Marketing() {
 
   const filteredTemplates = TEMPLATES.filter(t => activeTab === 'all' || t.category === activeTab);
 
-  const generateAndCopyPrompt = async () => {
-    if (!promptIdea.trim()) {
-      toast.error('Scrivi prima un\'idea per il post!');
-      return;
-    }
-    const finalPrompt = `Agisci come un Social Media Manager esperto per un Salone di Parrucchiere di alto livello.\nIl tuo obiettivo è scrivere un testo accattivante, professionale ma amichevole per i social o WhatsApp.\n\nEcco l'argomento del testo: "${promptIdea}"\n\nIstruzioni aggiuntive:\n- Usa una formattazione chiara e vai a capo spesso.\n- Inserisci le emoji giuste senza esagerare.\n- Includi una "Call to Action" (es. "Prenota ora", "Scrivici su WhatsApp").\n- Se è un post per i social, aggiungi 5-6 hashtag rilevanti alla fine.`;
-    
-    try {
-      await navigator.clipboard.writeText(finalPrompt);
-      toast.success('Prompt avanzato copiato! Incollalo su Gemini.');
-      setPromptIdea('');
-    } catch {
-      toast.error('Errore durante la copia');
-    }
-  };
 
   const handleCopy = async (id: string, text: string) => {
     try {
@@ -134,37 +118,7 @@ export default function Marketing() {
         </div>
       </div>
 
-      {/* Generatore di Prompt */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-         <div className="flex items-start gap-4">
-            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
-               <Bot size={24} />
-            </div>
-            <div className="flex-1">
-               <h3 className="font-bold text-slate-800 text-lg mb-1">Crea Testi Originali con l'Intelligenza Artificiale</h3>
-               <p className="text-slate-500 text-sm mb-4">
-                  Non sai cosa scrivere al computer per farti generare un buon post? Scrivi qui la tua idea in modo molto semplice (es. <i>"Voglio fare uno sconto del 20% sulle pieghe martedì prossimo"</i>). Il sistema creerà l'istruzione <span className="font-semibold">(prompt)</span> perfetta. Copiala e incollala su Gemini!
-               </p>
-               
-               <div className="flex gap-2 flex-col sm:flex-row">
-                  <input 
-                     type="text"
-                     value={promptIdea}
-                     onChange={(e) => setPromptIdea(e.target.value)}
-                     placeholder="Di cosa vuoi parlare? Es. Promozione colore, Chiusura estiva..."
-                     className="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                     onKeyDown={(e) => e.key === 'Enter' && generateAndCopyPrompt()}
-                  />
-                  <button 
-                     onClick={generateAndCopyPrompt}
-                     className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors whitespace-nowrap flex items-center justify-center gap-2 shadow-sm"
-                  >
-                     <Copy size={16} /> Copia Prompt
-                  </button>
-               </div>
-            </div>
-         </div>
-      </div>
+
 
       {/* SEZIONE: QR Code Clienti */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 relative overflow-hidden group">

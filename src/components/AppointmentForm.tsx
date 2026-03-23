@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { Calendar, FileText, Phone, User, Pencil, Trash2, X, Plus, ShoppingBag, Check, Settings, Package, ChevronDown, ChevronRight, StickyNote, MessageCircle, Star } from 'lucide-react';
+import { Calendar, FileText, Phone, User, Pencil, Trash2, X, Plus, ShoppingBag, Check, Settings, Package, ChevronDown, ChevronRight, StickyNote, MessageCircle, Star, Mail, CalendarDays } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { type Client, type Appointment, type ProductSold } from '../types';
 import { useClients } from '../hooks/useClients';
@@ -575,9 +575,9 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
+              <div className="flex flex-col justify-end">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Telefono (Opzionale)</label>
-                <div className="relative">
+                <div className="relative mt-auto">
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                   <input
                     {...register('phone', { 
@@ -598,25 +598,31 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                 </div>
               </div>
 
-              <div>
+              <div className="flex flex-col justify-end">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Email (Opzionale)</label>
-                <input
-                  type="email"
-                  {...register('email')}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
-                  placeholder="mario@example.com"
-                  readOnly={Boolean(selectedClient && !isEditingClient)}
-                />
+                <div className="relative mt-auto">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    type="email"
+                    {...register('email')}
+                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
+                    placeholder="mario@example.com"
+                    readOnly={Boolean(selectedClient && !isEditingClient)}
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Data di Nascita (Opzionale)</label>
-                <input
-                  type="date"
-                  {...register('birth_date')}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500 text-slate-700"
-                  readOnly={Boolean(selectedClient && !isEditingClient)}
-                />
+              <div className="flex flex-col justify-end">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nascita (Opzionale)</label>
+                <div className="relative mt-auto">
+                  <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    type="date"
+                    {...register('birth_date')}
+                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500 text-slate-700"
+                    readOnly={Boolean(selectedClient && !isEditingClient)}
+                  />
+                </div>
               </div>
             </div>
             

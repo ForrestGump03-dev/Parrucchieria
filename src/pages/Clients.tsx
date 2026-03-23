@@ -5,7 +5,8 @@ import { useClients } from '../hooks/useClients';
 import { type Client } from '../types';
 
 export default function Clients() {
-  const { clients, loading, fetchClients } = useClients();
+  // fetchClients here is only to trigger a manual refresh if needed down the line, but ClientList handles itself now.
+  const { fetchClients } = useClients();
   const [selectedClient, setSelectedClient] = useState<Client | undefined>(undefined);
 
   const handleClientSelect = (client: Client | undefined) => {
@@ -21,10 +22,8 @@ export default function Clients() {
       {/* Sidebar List */}
       <div className='lg:col-span-3 h-full'>
         <ClientList 
-          clients={clients} 
           onSelect={handleClientSelect} 
           selectedClientId={selectedClient?.id}
-          loading={loading}
           onClientDeleted={fetchClients}
         />
       </div>

@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Package, Calendar, Users, BarChart3, LogOut, Bell, Lock, Megaphone } from 'lucide-react';
+import { Package, Calendar, Users, BarChart3, LogOut, Bell, Lock, Megaphone, Menu, X } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
@@ -17,6 +17,7 @@ export default function MainLayout() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { settings, updateSettings } = useReminders();
   const { unreadCount } = useNotifications();
 
@@ -40,16 +41,32 @@ export default function MainLayout() {
     { path: '/marketing', label: 'Marketing & IA', icon: Megaphone },
   ];
 
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
+    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
       <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+      
+      {/* Mobile Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl">
+      <aside className={cn(
+        "w-64 bg-slate-900 text-white flex flex-col shadow-xl absolute md:relative z-50 h-full transition-transform duration-300",
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      )}>
         <div className="p-6 flex items-center gap-3 border-b border-slate-700">
           <div className="w-10 h-10 flex items-center justify-center bg-white rounded-full p-0.5 overflow-hidden">
-            {/* Uso percorso relativo 'logo.png' invece di '/logo.png' per Electron Prod */}
             <img
-              src="logo.png"
+              src="/logo.png"
               alt="Logo"
               className="w-full h-full object-contain"
               onError={(e) => {
@@ -63,6 +80,12 @@ export default function MainLayout() {
             <h1 className="font-bold text-lg leading-none tracking-wide">Root</h1>
             <span className="text-xs text-slate-400 font-medium">Salon Manager</span>
           </div>
+          <button 
+             className="md:hidden ml-auto p-1 text-slate-400 hover:text-white"
+             onClick={() => setIsMobileMenuOpen(false)}
+          >
+             <X size={20} />
+          </button>
         </div>
 
         <nav className="flex-1 p-4 space-y-2">
@@ -137,8 +160,24 @@ export default function MainLayout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto bg-slate-50">
-        <div className="p-8 max-w-7xl mx-auto min-h-full">
+      <main className="flex-1 overflow-y-auto bg-slate-50 flex flex-col h-full w-full">
+        {/* Mobile Header */}
+        <div className="md:hidden bg-slate-900 text-white p-4 flex items-center justify-between shadow-md shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 flex items-center justify-center bg-white rounded-full p-0.5 overflow-hidden">
+               <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+            </div>
+            <span className="font-bold">Root Manager</span>
+          </div>
+          <button 
+             onClick={() => setIsMobileMenuOpen(true)}
+             className="p-1 hover:bg-slate-800 rounded-lg transition-colors"
+          >
+            <Menu size={24} />
+          </button>
+        </div>
+
+        <div className="p-4 md:p-8 max-w-7xl mx-auto w-full flex-1">
           <Outlet />
         </div>
       </main>

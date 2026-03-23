@@ -44,7 +44,7 @@ interface ServiceItem {
 }
 
 export default function AgendaModal({ isOpen, onClose, initialDate, initialStaffId, appointmentToEdit, onSaved, onDeleteRequest }: AgendaModalProps) {
-  const { clients, addClient, fetchClients, getClientByPhone, findPotentialDuplicates } = useClients(); 
+  const { addClient, fetchClients, getClientByPhone, findPotentialDuplicates } = useClients(); 
   const { addAppointment, updateAppointment, getClientAppointmentsByTime, deleteAppointment } = useAppointments();
   const { treatments } = useTreatments();
   const { staff } = useStaff();
@@ -379,9 +379,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                </div>
                <div className="flex-1 overflow-hidden">
                  <ClientList 
-                   clients={clients} 
                    onSelect={handleClientSelect} 
-                   loading={false}
                    onClientDeleted={fetchClients}
                  />
                </div>
@@ -405,7 +403,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
+                  <div className="flex flex-col justify-end">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Telefono (Opzionale)</label>
                     <input
                       {...registerNewClient('phone', { 
@@ -420,24 +418,24 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
                         }
                       })}
                       placeholder="Se disponibile..."
-                      className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="mt-auto w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
                   </div>
-                  <div>
+                  <div className="flex flex-col justify-end">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Email (Opzionale)</label>
                     <input
                       type="email"
                       {...registerNewClient('email')}
                       placeholder="mario@example.com"
-                      className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="mt-auto w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
                   </div>
-                  <div>
+                  <div className="flex flex-col justify-end">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Nascita (Opzionale)</label>
                     <input
                       type="date"
                       {...registerNewClient('birth_date')}
-                      className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700"
+                      className="mt-auto w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700"
                     />
                   </div>
                 </div>

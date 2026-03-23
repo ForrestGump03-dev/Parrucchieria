@@ -2,9 +2,9 @@
 
 ## 1. Panoramica del Progetto
 
-- **Nome**: Root Salon Manager (v2.7.0)
-- **Scopo**: Gestionale desktop per saloni di parrucchieri. Single-tenant (un account Supabase = un salone).
-- **Piattaforma**: App Electron (Windows/macOS/Linux) con React SPA servita localmente. Backend Supabase (auth + DB + RLS).
+- **Nome**: Root Salon Manager (v3.0.0)
+- **Scopo**: Gestionale per saloni di parrucchieri. Single-tenant (un account Supabase = un salone).
+- **Piattaforma**: Semplice Web App React (Vite SPA). Backend Supabase (auth + DB + RLS).
 - **Utenti**: Titolari/operatori del salone. Un solo utente per installazione.
 
 ---
@@ -14,7 +14,6 @@
 | Libreria | Versione | Ruolo |
 |----------|----------|-------|
 | React | ^19.2.0 | UI framework |
-| Electron | ^40.0.0 | Desktop wrapper |
 | @supabase/supabase-js | ^2.90.1 | Backend BaaS (auth + DB) |
 | Tailwind CSS | ^4.1.18 | Styling utility-first (Vite plugin) |
 | TypeScript | ~5.9.3 | Linguaggio — strict mode |
@@ -30,19 +29,13 @@
 | lucide-react | ^0.562.0 | Icone |
 | clsx + tailwind-merge | ^2.1.1 / ^3.4.0 | Utility classi CSS (`cn()`) |
 | Vite | ^7.2.4 | Build tool / dev server |
-| Electron Builder | ^26.4.0 | Packaging distribuzione |
 
 ---
 
 ## 3. Architettura e Flusso Dati
 
-### Struttura Electron
-
-- **Renderer**: React SPA (Vite) caricata da Electron come `BrowserWindow`.
-- **Main process**: `electron/main.cjs` — gestisce finestra principale, splash screen, percorsi asset.
-- **Preload**: `electron/preload.cjs` — bridge sicuro tramite `contextBridge`. Espone solo `window.electron.platform`. Nessun canale IPC aggiuntivo attualmente attivo.
-- **Splash screen**: finestra frameless (500×300), `alwaysOnTop: true`, caricata da `public/splash.html`. La finestra principale resta nascosta (`show: false`) finché non è pronta.
-- **Asset path**: i file in `public/` vanno referenziati come path relativi (es. `'logo.png'`, NON `'/logo.png'`) per compatibilità con Electron in produzione.
+### Piattaforma Web (Rimozione Electron)
+Tutte le dipendenze di Electron sono state rimosse. L'app è ora una SPA web-only progettata per essere hostata su piattaforme web standard come Vercel o Netlify.
 
 ### Routing
 
@@ -89,6 +82,10 @@ Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile c
 | `first_name` | `string` | No | |
 | `last_name` | `string` | No | |
 | `phone` | `string` | No | Usato per ricerca duplicati |
+| `email` | `string` | Sì | |
+| `birth_date` | `string` | Sì | Data di nascita |
+| `is_vip` | `boolean` | Sì | Cliente VIP |
+| `is_active` | `boolean` | Sì | Per soft-delete |
 
 ### `appointments`
 
@@ -217,15 +214,16 @@ Mantiene stato locale `clients[]` sincronizzato con Supabase.
 
 | Valore/Metodo | Tipo | Descrizione |
 |---------------|------|-------------|
-| `clients` | `Client[]` | Lista clienti ordinata per `first_name` ASC. Caricata al mount. |
-| `loading` | `boolean` | Stato caricamento iniziale. |
+| `clients` | `Client[]` | Lista clienti della pagina corrente. Caricata dal server tramite paginazione (`.range()`). |
+| `totalCount` | `number` | Numero totale esatto dei clienti attivi, utile per la UI di paginazione. |
+| `loading` | `boolean` | Stato caricamento iniziale o durante il fetch della pagina. |
 | `error` | `string \| null` | Messaggio errore fetch. |
-| `fetchClients()` | `Promise<void>` | Ri-fetcha da Supabase e aggiorna stato locale. |
+| `fetchClients(options)` | `Promise<void>` | Ri-fetcha da Supabase filtrando per `is_active = true`. Accetta opzioni `{ page, limit, search, sortOrder, activeTab }`. |
 | `addClient(client)` | `Promise<Client>` | INSERT con `user_id: user.id`. Aggiorna stato locale ottimisticamente. |
 | `updateClient(id, updates)` | `Promise<Client>` | UPDATE + aggiorna stato locale. |
-| `deleteClient(id)` | `Promise<void>` | Prima elimina tutti gli appuntamenti del cliente (constraint FK), poi elimina il cliente. |
-| `getClientByPhone(phone)` | `Promise<Client \| null>` | SELECT singolo per telefono. Usato per rilevare duplicati durante inserimento. |
-| `findPotentialDuplicates(firstName, lastName)` | `Promise<Client[]>` | SELECT con `ilike` su nome + cognome (case-insensitive). Usato per alert duplicati. |
+| `deleteClient(id)` | `Promise<void>` | *Soft delete*: Imposta `is_active` a false. |
+| `getClientByPhone(phone)` | `Promise<Client \| null>` | SELECT singolo per telefono. |
+| `findPotentialDuplicates(firstName, lastName)` | `Promise<Client[]>` | SELECT con `ilike` su nome/cognome. |
 
 ---
 
@@ -454,9 +452,14 @@ Modale conferma operazioni distruttive. Sostituisce `window.confirm()`.
 
 ### `ClientList` (`src/components/ClientList.tsx`)
 
-Sidebar lista clienti con ricerca (nome, cognome, telefono) e eliminazione con `ConfirmModal`.
+Sidebar lista clienti con ricerca (nome, cognome, telefono), filtri (Compleanni del mese) e **Paginazione**.
 
-**Props**: `clients`, `onSelect`, `selectedClientId`, `loading`, `onClientDeleted`.
+**Feature:**
+- Usa paginazione **server-side** passando i parametri al backend per limitare i re-render e risparmiare memoria, a chunk di 15.
+- Supporta l'ordinamento Alfabetico (A-Z) o Recenti (`sortOrder`).
+- Supporta i tab per filtrare (Tutti, Compleanni del mese, Winback).
+
+**Props**: `onSelect`, `selectedClientId`, `onClientDeleted`.
 
 ---
 
@@ -603,48 +606,31 @@ Recupero password via OTP Supabase. Aperto da `Login`.
 
 ---
 
-## 10. Electron IPC
+## 10. Developer Standards
 
-- **Main process**: `electron/main.cjs`
-- **Preload**: `electron/preload.cjs` — espone:
-
-```javascript
-window.electron = {
-  platform: process.platform  // 'win32' | 'darwin' | 'linux'
-}
-```
-
-Nessun canale IPC bidirezionale attivo. Aggiungere nuovi canali sempre via `contextBridge.exposeInMainWorld` nel preload — mai abilitare `nodeIntegration: true`.
-
----
-
-## 11. Developer Standards
-
-- **Routing**: sempre `HashRouter`. `BrowserRouter` non funziona con Electron (`file://` protocol).
+- **Routing**: Si può utilizzare sia `BrowserRouter` per build web standard che HashRouter. Attualmente configurato come PWA-friendly.
 - **Styling**: Tailwind CSS v4, solo classi utility. Helper `cn()` in `src/lib/utils.ts`. Evitare file `.css` salvo `src/index.css` e `src/App.css`.
 - **Date**: `date-fns` con locale `it` in tutti i `format()`, `parse()` e nel localizer del calendario. Mai `moment.js`.
 - **Form**: `react-hook-form` + `zod` con `zodResolver`. Non usare stato controllato manuale per i form.
 - **Toast**: `react-hot-toast`. Il `<Toaster />` è montato una sola volta in `MainLayout`. Non aggiungere istanze aggiuntive.
 - **Icone**: `lucide-react` esclusivamente.
 - **RLS**: ogni `insert` Supabase deve includere `user_id: user.id`.
-- **Asset Electron**: path relativi (`'logo.png'`), mai `/logo.png` o path assoluti.
 - **TypeScript**: strict mode. Nessun `any` implicito.
 - **Dialoghi distruttivi**: sempre `ConfirmModal`, mai `window.confirm()`.
 - **Lingua**: italiano per tutti i testi UI, commenti e messaggi di commit.
 
 ---
 
-## 12. Workflow Comuni
+## 11. Workflow Comuni
 
-- **Dev**: `npm run electron:dev` — avvia Vite su porta 5173 + Electron (`concurrently` + `wait-on`).
-- **Build**: `npm run electron:pack` — TypeScript build + Vite build + Electron Builder → `release_new/`.
-- **Solo web**: `npm run dev` → Vite su `http://localhost:5173`.
+- **Dev**: `npm run dev` — avvia Vite su porta 5173.
+- **Build**: `npm run build` — TypeScript build + Vite build per ambiente di produzione web.
 - **Nuova tabella Supabase**: 1) interfaccia in `src/types/index.ts`, 2) hook in `src/hooks/`, 3) `user_id: user.id` in ogni insert.
 - **Tipi DB**: aggiornare `src/types/index.ts` immediatamente ad ogni modifica dello schema.
 
 ---
 
-## 13. File Chiave — Riferimento Rapido
+## 12. File Chiave — Riferimento Rapido
 
 | File | Ruolo |
 |------|-------|
@@ -677,8 +663,5 @@ Nessun canale IPC bidirezionale attivo. Aggiungere nuovi canali sempre via `cont
 | `src/components/NotificationDrawer.tsx` | Drawer centro notifiche |
 | `src/components/ChangePasswordModal.tsx` | Cambio password (aperto da `PASSWORD_RECOVERY`) |
 | `src/constants/treatments.ts` | Trattamenti predefiniti (seed DB) |
-| `electron/main.cjs` | Main process: finestra, splash screen, asset path |
-| `electron/preload.cjs` | Bridge: espone `window.electron.platform` |
 | `supabase/migrations/` | Migrazioni schema DB |
-| `public/splash.html` | Splash screen Electron (frameless, alwaysOnTop) |
 | `.github/copilot-instructions.md` | Questo file — aggiornare dopo ogni modifica significativa |
