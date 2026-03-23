@@ -35,6 +35,7 @@ export default function Reports() {
       // Nomi finti realistici per migliorare la UX del seed
       const firstNames = ['Giulia', 'Sofia', 'Martina', 'Francesco', 'Alessandro', 'Marco', 'Laura', 'Anna', 'Luca', 'Matteo', 'Chiara', 'Sara', 'Elena', 'Andrea', 'Davide'];
       const lastNames = ['Rossi', 'Russo', 'Ferrari', 'Esposito', 'Bianchi', 'Romano', 'Colombo', 'Ricci', 'Marino', 'Greco', 'Bruno', 'Gallo', 'Conti', 'De Luca', 'Costa'];
+      const targetPhones: string[] = [];
 
       const clientsBatch = Array.from({ length: 100 }).map((_, i) => {
         const phone = `333${String(i).padStart(7, '0')}`;
