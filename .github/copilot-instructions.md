@@ -221,9 +221,9 @@ Mantiene stato locale `clients[]` sincronizzato con Supabase.
 | `fetchClients(options)` | `Promise<void>` | Ri-fetcha da Supabase filtrando per `is_active = true`. Accetta opzioni `{ page, limit, search, sortOrder, activeTab }`. |
 | `addClient(client)` | `Promise<Client>` | INSERT con `user_id: user.id`. Aggiorna stato locale ottimisticamente. |
 | `updateClient(id, updates)` | `Promise<Client>` | UPDATE + aggiorna stato locale. |
-| `deleteClient(id)` | `Promise<void>` | *Soft delete*: Imposta `is_active` a false. |
-| `getClientByPhone(phone)` | `Promise<Client \| null>` | SELECT singolo per telefono. |
-| `findPotentialDuplicates(firstName, lastName)` | `Promise<Client[]>` | SELECT con `ilike` su nome/cognome. |
+| `deleteClient(id)` | `Promise<void>` | *Soft delete*: Imposta `is_active` a false. Verifica autenticazione come `addClient`. |
+| `getClientByPhone(phone)` | `Promise<Client \| null>` | SELECT singolo per telefono. Filtra solo clienti attivi (`is_active = true`). |
+| `findPotentialDuplicates(firstName, lastName)` | `Promise<Client[]>` | SELECT con `ilike` su nome/cognome. Filtra solo clienti attivi (`is_active = true`). |
 
 ---
 
@@ -370,6 +370,25 @@ Semplici re-export dai rispettivi context:
 
 ---
 
+### `useWinback` (`src/hooks/useWinback.ts`)
+
+Identifica candidati al "winback" — clienti la cui ultima visita risale a più di N giorni fa.
+
+| Valore/Metodo | Tipo | Descrizione |
+|---------------|------|-------------|
+| `candidates` | `WinbackCandidate[]` | Clienti con ultima visita > `daysThreshold`. Ordinati per `days_since` DESC. |
+| `loading` | `boolean` | |
+| `refetch` | `() => Promise<void>` | Ri-fetcha i candidati. |
+
+**Logica**:
+- Fetcha tutti gli appuntamenti (`client_id`, `date`), raggruppa per cliente e trova la data più recente.
+- Filtra i clienti la cui ultima visita è ≥ `daysThreshold` giorni fa (default: 60).
+- Fetcha i dettagli dei clienti corrispondenti. Filtra solo clienti attivi (`is_active = true`).
+- `WinbackCandidate` estende `Client` con `last_visit: string` e `days_since: number`.
+- Usato nel tab "Recupero" di `ClientList`.
+
+---
+
 ## 7. Componenti
 
 ### `AgendaModal` (`src/components/AgendaModal.tsx`)
@@ -411,7 +430,9 @@ Form principale in Clienti & Cassa. Gestisce registrazione appuntamenti e checko
 
 **Comportamento**:
 - **Rilevamento duplicati telefono**: debounce su `watch('phone')` → `getClientByPhone` → toast interattivo con button "Usa questo cliente".
+- **Rilevamento duplicati al submit**: se durante il submit viene trovato un cliente con lo stesso telefono o nome/cognome, si apre un `ConfirmModal` (`duplicateConfirm` state) per chiedere se usare il cliente esistente. Su conferma → `onSelectExistingClient`. Su annullamento → il submit si interrompe.
 - **Storico cliente**: `getClientHistory` → gruppi per data (accordion `expandedDates: Set<string>`).
+- **Modifica dati cliente**: sezione inline con salva/annulla. Il pulsante "Annulla" ripristina tutti i campi (`first_name`, `last_name`, `phone`, `email`, `birth_date`) ai valori originali del `selectedClient`.
 - **Checkout**: form unificato Servizi + Prodotti → INSERT con `price` non null → `decrementStock` per ogni prodotto.
 - **Pre-compilazione prezzo**: `getLastPriceForTreatment` per suggerire l'ultimo prezzo usato.
 - **Tipo prodotti**: `ProductItem.product` tipizzato come `{ id: string; name: string; price: number }`. I `products_sold` di ogni appuntamento usano `ProductSold[]`.
@@ -459,7 +480,10 @@ Sidebar lista clienti con ricerca (nome, cognome, telefono), filtri (Compleanni 
 - Supporta l'ordinamento Alfabetico (A-Z) o Recenti (`sortOrder`).
 - Supporta i tab per filtrare (Tutti, Compleanni del mese, Winback).
 
-**Props**: `onSelect`, `selectedClientId`, `onClientDeleted`.
+**Props**: `onSelect`, `selectedClientId`, `onClientDeleted`, `refreshTrigger` (opzionale).
+
+**Note**:
+- `refreshTrigger`: prop numerico incrementato dal parent (`Clients.tsx`) per forzare un re-fetch della lista. Usato come dipendenza nel `useEffect` di fetching.
 
 ---
 
@@ -538,7 +562,7 @@ Recupero password via OTP Supabase. Aperto da `Login`.
 
 - **Rotta**: `/clients`
 - **Layout**: griglia 12 colonne — `ClientList` (3 col, sidebar) + `AppointmentForm` (9 col)
-- **Hook**: `useClients`
+- **Pattern refreshTrigger**: `Clients.tsx` non istanzia più `useClients()`. Usa un counter `refreshTrigger` (incrementato da `triggerRefresh`) passato a `ClientList` come prop e ad `AppointmentForm` come `onClientUpdated`. Questo garantisce che quando il form crea un nuovo cliente o completa un checkout, la sidebar si ri-fetchi correttamente.
 - **Flusso**: click cliente → `selectedClient` → `AppointmentForm` (storico + checkout)
 
 ---
