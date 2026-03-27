@@ -1,21 +1,19 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import ClientList from '../components/ClientList';
 import AppointmentForm from '../components/AppointmentForm';
-import { useClients } from '../hooks/useClients';
 import { type Client } from '../types';
 
 export default function Clients() {
-  // fetchClients here is only to trigger a manual refresh if needed down the line, but ClientList handles itself now.
-  const { fetchClients } = useClients();
   const [selectedClient, setSelectedClient] = useState<Client | undefined>(undefined);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const handleClientSelect = (client: Client | undefined) => {
     setSelectedClient(client);
   };
 
-  const handleClientUpdated = () => {
-    fetchClients();
-  };
+  const triggerRefresh = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
 
   return (
     <div className='grid grid-cols-1 lg:grid-cols-12 gap-8 h-[calc(100vh-8rem)]'>
@@ -24,7 +22,8 @@ export default function Clients() {
         <ClientList 
           onSelect={handleClientSelect} 
           selectedClientId={selectedClient?.id}
-          onClientDeleted={fetchClients}
+          onClientDeleted={triggerRefresh}
+          refreshTrigger={refreshTrigger}
         />
       </div>
 
@@ -32,10 +31,11 @@ export default function Clients() {
       <div className='lg:col-span-9 h-full overflow-y-auto'>
         <AppointmentForm 
           selectedClient={selectedClient} 
-          onClientUpdated={handleClientUpdated}
+          onClientUpdated={triggerRefresh}
           onSelectExistingClient={setSelectedClient}
         />
       </div>
     </div>
   );
 }
+

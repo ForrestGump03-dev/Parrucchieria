@@ -63,6 +63,12 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
   const [isTreatmentManagerOpen, setIsTreatmentManagerOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  const [duplicateConfirm, setDuplicateConfirm] = useState<{
+    isOpen: boolean;
+    message: string;
+    existingClient: Client | null;
+    pendingFormData: FormData | null;
+  }>({ isOpen: false, message: '', existingClient: null, pendingFormData: null });
   
   // Watch phone for duplicate check
   const phoneValue = watch('phone');
@@ -258,30 +264,28 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
          if (data.phone && data.phone.length > 5) {
              const existing = await getClientByPhone(data.phone);
              if (existing) {
-                 const confirmLoad = confirm(`Attenzione: Il numero ${data.phone} è già associato a ${existing.first_name} ${existing.last_name}. Vuoi usare questo cliente esistente invece di crearne uno nuovo?`);
-                 if (confirmLoad) {
-                    if(onSelectExistingClient) {
-                        onSelectExistingClient(existing);
-                        toast.success(`Dati di ${existing.first_name} caricati! Riprova il salvataggio.`);
-                        setSubmitting(false);
-                        return;
-                    }
-                 }
+                 setDuplicateConfirm({
+                   isOpen: true,
+                   message: `Il numero ${data.phone} è già associato a ${existing.first_name} ${existing.last_name}. Vuoi usare questo cliente esistente invece di crearne uno nuovo?`,
+                   existingClient: existing,
+                   pendingFormData: data
+                 });
+                 setSubmitting(false);
+                 return;
              }
          } else {
              // 2. Soft Name Check
              const possibleDupes = await findPotentialDuplicates(data.first_name, data.last_name);
              if (possibleDupes.length > 0) {
                 const match = possibleDupes[0];
-                const confirmLoad = confirm(`Esiste già un cliente chiamato "${match.first_name} ${match.last_name}" (ma senza telefono o con telefono diverso). Vuoi usare quello esistente per evitare clonazioni?`);
-                if (confirmLoad) {
-                    if (onSelectExistingClient) {
-                       onSelectExistingClient(match);
-                       toast.success(`Dati caricati!`);
-                       setSubmitting(false);
-                       return;
-                    }
-                }
+                setDuplicateConfirm({
+                  isOpen: true,
+                  message: `Esiste già un cliente chiamato "${match.first_name} ${match.last_name}" (ma senza telefono o con telefono diverso). Vuoi usare quello esistente per evitare clonazioni?`,
+                  existingClient: match,
+                  pendingFormData: data
+                });
+                setSubmitting(false);
+                return;
              }
          }
          
@@ -532,6 +536,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                             setValue('first_name', selectedClient.first_name);
                             setValue('last_name', selectedClient.last_name);
                             setValue('phone', selectedClient.phone);
+                            setValue('email', selectedClient.email || '');
+                            setValue('birth_date', selectedClient.birth_date || '');
                          }}
                          className="flex items-center gap-1 text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded hover:bg-slate-200"
                        >
@@ -971,7 +977,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                                                        <button 
                                                             onClick={(e) => { e.stopPropagation(); handleEdit(item); }}
                                                             className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                            title="Modifica singolo interveto"
+                                                            title="Modifica singolo intervento"
                                                        >
                                                             <Pencil size={16} />
                                                        </button>
@@ -1010,6 +1016,25 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
         isDanger={true}
         onConfirm={performDelete}
         onCancel={() => setItemToDelete(null)}
+      />
+
+      <ConfirmModal
+        isOpen={duplicateConfirm.isOpen}
+        title="Cliente Duplicato Trovato"
+        message={duplicateConfirm.message}
+        confirmText="Sì, usa esistente"
+        cancelText="No, crea nuovo"
+        isDanger={false}
+        onConfirm={() => {
+          if (duplicateConfirm.existingClient && onSelectExistingClient) {
+            onSelectExistingClient(duplicateConfirm.existingClient);
+            toast.success(`Dati di ${duplicateConfirm.existingClient.first_name} caricati! Riprova il salvataggio.`);
+          }
+          setDuplicateConfirm({ isOpen: false, message: '', existingClient: null, pendingFormData: null });
+        }}
+        onCancel={() => {
+          setDuplicateConfirm({ isOpen: false, message: '', existingClient: null, pendingFormData: null });
+        }}
       />
     </div>
   );

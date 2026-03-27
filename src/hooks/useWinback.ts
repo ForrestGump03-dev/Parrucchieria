@@ -64,7 +64,8 @@ export function useWinback(daysThreshold = 60) {
             const { data: clientsData, error: clientErr } = await supabase
                 .from('clients')
                 .select('*')
-                .in('id', candidateIds);
+                .in('id', candidateIds)
+                .eq('is_active', true);
                 
             if (clientErr) throw clientErr;
             

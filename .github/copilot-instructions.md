@@ -18,7 +18,7 @@
 | Tailwind CSS | ^4.1.18 | Styling utility-first (Vite plugin) |
 | TypeScript | ~5.9.3 | Linguaggio — strict mode |
 | react-router-dom | ^7.12.0 | Routing (`BrowserRouter` per Web App) |
-| react-helmet-async | ^2.0.5 | SEO e titoli dinamici per PWA |
+| react-helmet-async | ^3.0.0 | SEO e titoli dinamici per PWA |
 | date-fns | ^4.1.0 | Date (locale `it` ovunque) |
 | react-hook-form | ^7.71.1 | Gestione form |
 | zod | ^4.3.5 | Schema validation |
@@ -182,7 +182,7 @@ export type NewAppointment = Omit<Appointment, 'id' | 'created_at' | 'clients'>;
 ### Note sui Context
 
 - **NotificationContext**: persiste in `localStorage` (`'app_notifications'`). Lo stato viene ricaricato al mount.
-- **StaffContext**: ri-fetcha i dati quando la finestra Electron torna in focus (`window.addEventListener('focus', ...)`).
+- **StaffContext**: ri-fetcha i dati quando la finestra del browser torna in focus (`window.addEventListener('focus', ...)`).
 - **TreatmentContext**: `addTreatment` lancia errore con messaggio localizzato se il nome è duplicato (codice Supabase `23505`). `seedDefaults()` carica i trattamenti predefiniti da `src/constants/treatments.ts`.
 
 ---
@@ -635,7 +635,7 @@ Recupero password via OTP Supabase. Aperto da `Login`.
 | File | Ruolo |
 |------|-------|
 | `src/types/index.ts` | Tipi Supabase — **fonte autoritativa schema DB** |
-| `src/App.tsx` | Routing (HashRouter, guard autenticazione) |
+| `src/App.tsx` | Routing (BrowserRouter, guard autenticazione) |
 | `src/layout/MainLayout.tsx` | Sidebar, navigazione, campana notifiche, `PASSWORD_RECOVERY` listener |
 | `src/lib/supabase.ts` | Client Supabase (da variabili d'ambiente `VITE_*`) |
 | `src/lib/utils.ts` | `cn()` (classi CSS), `exportToCsv()` (download CSV) |
@@ -649,6 +649,7 @@ Recupero password via OTP Supabase. Aperto da `Login`.
 | `src/hooks/useStats.ts` | KPI aggregati, confronto periodi, tipi statistiche |
 | `src/hooks/useDetailedReport.ts` | Report dettagliato per cliente, `DetailedClientRow`, `DetailedReportData` |
 | `src/hooks/useReminders.ts` | Reminder appuntamenti + backup Smart Snooze 14gg |
+| `src/hooks/useWinback.ts` | Candidati winback — clienti con ultima visita > N giorni (default 60) |
 | `src/pages/Agenda.tsx` | Calendario DnD con colonne staff, context menu, DnD |
 | `src/pages/Clients.tsx` | Sidebar clienti + form checkout |
 | `src/pages/Inventory.tsx` | Gestione magazzino prodotti |

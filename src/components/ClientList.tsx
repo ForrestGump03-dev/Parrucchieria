@@ -11,9 +11,10 @@ interface ClientListProps {
   onSelect: (client: Client) => void;
   selectedClientId?: string;
   onClientDeleted?: () => void;
+  refreshTrigger?: number;
 }
 
-export default function ClientList({ onSelect, selectedClientId, onClientDeleted }: ClientListProps) {
+export default function ClientList({ onSelect, selectedClientId, onClientDeleted, refreshTrigger }: ClientListProps) {
   const [search, setSearch] = useState('');
   const { clients, totalCount, loading, fetchClients, deleteClient } = useClients();
 
@@ -64,7 +65,7 @@ export default function ClientList({ onSelect, selectedClientId, onClientDeleted
         activeTab: activeTab === 'birthdays' ? 'birthdays' : 'all'
       });
     }
-  }, [fetchClients, currentPage, itemsPerPage, search, sortOrder, activeTab]);
+  }, [fetchClients, currentPage, itemsPerPage, search, sortOrder, activeTab, refreshTrigger]);
 
   const totalPages = activeTab === 'winback' 
     ? Math.ceil(candidates.length / itemsPerPage) 

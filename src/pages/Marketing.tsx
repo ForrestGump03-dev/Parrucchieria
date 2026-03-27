@@ -64,12 +64,21 @@ export default function Marketing() {
   const handlePrintQr = () => {
      if (!qrRef.current) return;
      const printContents = qrRef.current.innerHTML;
-     const originalContents = document.body.innerHTML;
-     
-     document.body.innerHTML = printContents;
-     window.print();
-     document.body.innerHTML = originalContents;
-     window.location.reload(); 
+     const printWindow = window.open('', '_blank', 'width=600,height=800');
+     if (!printWindow) {
+       toast.error('Impossibile aprire la finestra di stampa. Controlla il blocco popup.');
+       return;
+     }
+     printWindow.document.write(`
+       <html><head><title>Stampa QR Code</title>
+       <style>body { display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; font-family: sans-serif; }</style>
+       </head><body>${printContents}</body></html>
+     `);
+     printWindow.document.close();
+     printWindow.onload = () => {
+       printWindow.print();
+       printWindow.close();
+     };
   };
 
   const filteredTemplates = TEMPLATES.filter(t => activeTab === 'all' || t.category === activeTab);

@@ -111,17 +111,19 @@ export function useClients() {
   }, [user]);
 
   const deleteClient = useCallback(async (id: string) => {
+    if (!user) throw new Error("Utente non autenticato");
     const { error } = await supabase.from('clients').update({ is_active: false }).eq('id', id);
     if (error) throw error;
     
     setClients((prev) => prev.filter(c => c.id !== id));
-  }, []);
+  }, [user]);
 
   const getClientByPhone = useCallback(async (phone: string) => {
      const { data, error } = await supabase
        .from('clients')
        .select('*')
        .eq('phone', phone)
+       .eq('is_active', true)
        .maybeSingle();
      
      if (error) {
@@ -136,7 +138,8 @@ export function useClients() {
       .from('clients')
       .select('*')
       .ilike('first_name', firstName.trim())
-      .ilike('last_name', lastName.trim());
+      .ilike('last_name', lastName.trim())
+      .eq('is_active', true);
     
     return data || [];
   }, []);
