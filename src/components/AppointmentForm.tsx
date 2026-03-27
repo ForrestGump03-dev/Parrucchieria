@@ -175,7 +175,13 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
     setSelectedServices([]);
     setSelectedProducts([]);
     if (selectedClient) {
+      setValue('first_name', selectedClient.first_name);
+      setValue('last_name', selectedClient.last_name);
+      setValue('phone', selectedClient.phone);
+      setValue('email', selectedClient.email || '');
+      setValue('birth_date', selectedClient.birth_date || '');
       setValue('date', format(new Date(), 'yyyy-MM-dd'));
+      setValue('notes', '');
     } else {
       reset();
     }
