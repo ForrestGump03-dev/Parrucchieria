@@ -16,9 +16,9 @@ function App() {
             <div className="hidden md:flex items-center space-x-8">
               <a href="#features" className="text-slate-600 hover:text-indigo-600 font-medium">Funzionalità</a>
               <a href="#pricing" className="text-slate-600 hover:text-indigo-600 font-medium">Prezzi</a>
-              <button className="bg-indigo-600 text-white px-5 py-2.5 rounded-full font-semibold hover:bg-indigo-700 transition shadow-sm">
-                Prova Gratis
-              </button>
+              <a href="https://calendly.com/" target="_blank" rel="noreferrer" className="bg-indigo-600 text-white px-5 py-2.5 rounded-full font-semibold hover:bg-indigo-700 transition shadow-sm">
+                Prenota una Demo
+              </a>
             </div>
           </div>
         </div>
@@ -32,7 +32,7 @@ function App() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-fuchsia-500"></span>
             </span>
-            L'alternativa Made in Italy a Treatwell e Fresha
+            L'alternativa Made in Italy ai classici portali di prenotazione
           </div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 mb-6 leading-tight">
             Il gestionale per parrucchieri che <span className="text-indigo-600">azzera i No-Show</span> e riempie l'agenda.
@@ -41,12 +41,12 @@ function App() {
             Nessuna commissione occulta. Protezione totale degli incassi, automazioni WhatsApp per il recupero clienti e Smart Booking progettato esclusivamente per le esigenze dei Saloni di Acconciatura.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-            <button className="bg-indigo-600 text-white px-8 py-3.5 rounded-full font-bold text-lg hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2">
-              Inizia la Prova Gratuita <ArrowRight size={20} />
-            </button>
-            <button className="bg-white text-slate-700 border border-slate-300 px-8 py-3.5 rounded-full font-bold text-lg hover:bg-slate-50 transition flex items-center justify-center">
+            <a href="https://calendly.com/" target="_blank" rel="noreferrer" className="bg-indigo-600 text-white px-8 py-3.5 rounded-full font-bold text-lg hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2">
+              Prenota una Demo con noi <ArrowRight size={20} />
+            </a>
+            <a href="#features" className="bg-white text-slate-700 border border-slate-300 px-8 py-3.5 rounded-full font-bold text-lg hover:bg-slate-50 transition flex items-center justify-center">
               Scopri le Funzionalità
-            </button>
+            </a>
           </div>
           <div className="mt-8 flex items-center justify-center lg:justify-start gap-4 text-sm text-slate-500 font-medium">
             <div className="flex items-center gap-1.5"><CheckCircle2 size={18} className="text-emerald-500" /> Nessuna carta richiesta</div>
@@ -87,13 +87,13 @@ function App() {
           <div className="grid md:grid-cols-3 gap-8">
             <FeatureCard 
               icon={<ShieldCheck size={32} className="text-emerald-500" />}
-              title="Protezione Incassi & No-Show"
-              desc="Basta rimetterci soldi per clienti che non si presentano. Chiedi carte a garanzia o pagamenti anticipati, azzerando istantaneamente il rischio dei buchi in agenda."
+              title="Gestione No-Show & Storico"
+              desc="Previeni i buchi in agenda grazie a promemoria precisi, uno storico dettagliato sull'affidabilità di ogni cliente e protezione contro le perdite di tempo."
             />
             <FeatureCard 
               icon={<Smartphone size={32} className="text-indigo-500" />}
-              title="Automazioni WhatsApp API"
-              desc="Le mail non le legge nessuno. Integra nativamente WhatsApp per promemoria a 24/48h, auguri di compleanno e recupero automatico dei clienti inattivi."
+              title="Link WhatsApp Rapidi (Gratis)"
+              desc="Nessun costo extra per SMS o API a pagamento. Genera con un click messaggi WhatsApp Web o Mobile precompilati per inviare promemoria, auguri e messaggi di win-back ai clienti."
             />
             <FeatureCard 
               icon={<SplitSquareHorizontal size={32} className="text-fuchsia-500" />}
@@ -129,7 +129,7 @@ function App() {
                      <div className="bg-red-100 text-red-600 p-2 rounded-lg mt-1 shrink-0"><XIcon /></div>
                      <div>
                         <h4 className="font-bold text-lg">Il Problema degli "Altri"</h4>
-                        <p className="text-slate-600 text-sm">Treatwell, Fresha e Booksy ti portano clienti, ma si trattengono pesanti percentuali ogni volta, di fatto "affittandoti" i tuoi stessi clienti. Usano SMS che ti fanno pagare a peso d'oro o le loro App che le clienti odiano scaricare.</p>
+                        <p className="text-slate-600 text-sm">I portali generalisti ti portano clienti, ma si trattengono pesanti percentuali ogni volta, di fatto "affittandoti" i tuoi stessi clienti. In più costringono i tuoi clienti a scaricare app pesanti o si appoggiano a SMS extra a pagamento.</p>
                      </div>
                   </div>
                   <div className="flex items-start gap-4">
@@ -153,9 +153,8 @@ function App() {
           </div>
 
           <div className="max-w-lg mx-auto bg-white text-slate-900 rounded-3xl p-8 shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-bold">Piano Pro</h3>
-              <span className="bg-indigo-100 text-indigo-700 font-bold px-3 py-1 rounded-full text-sm">Più scelto</span>
+            <div className="mb-6">
+              <h3 className="text-2xl font-bold">Unico Piano, Tutto Incluso</h3>
             </div>
             <div className="mb-6">
               <span className="text-5xl font-black">49</span>
@@ -163,15 +162,15 @@ function App() {
             </div>
             <ul className="space-y-4 mb-8">
               <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Smart Booking & Gestione Risorse</li>
-              <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Integrazione WhatsApp API (Winback, Compleanni)</li>
+              <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Generatore Link WhatsApp Web Istantanei </li>
               <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Prenotazione Online & Reserve with Google</li>
-              <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Protezione No-Show (Pagamenti integrati)</li>
+              <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Profilazione Clienti Premium</li>
               <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Magazzino & Statistiche Avanzate</li>
             </ul>
-            <button className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 transition shadow-lg">
-              Inizia la Prova di 14 Giorni
-            </button>
-            <p className="text-center text-slate-500 text-sm mt-4">Nessuna carta di credito richiesta per provare.</p>
+            <a href="https://calendly.com/" target="_blank" rel="noreferrer" className="block w-full text-center bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 transition shadow-lg">
+              Prenota una Demo Gratuita
+            </a>
+            <p className="text-center text-slate-500 text-sm mt-4">Parlaci delle tue esigenze in videochiamata.</p>
           </div>
         </div>
       </section>
@@ -180,9 +179,9 @@ function App() {
       <section className="bg-indigo-600 py-20 px-4 sm:px-6 lg:px-8 text-center text-white">
         <h2 className="text-3xl sm:text-4xl font-bold mb-6">Pronto a trasformare il tuo salone in un'azienda moderna?</h2>
         <p className="text-indigo-100 text-lg mb-8 max-w-2xl mx-auto">Unisciti ai saloni italiani che hanno smesso di rincorrere le telefonate e hanno iniziato a governare i propri incassi con la tecnologia.</p>
-        <button className="bg-white text-indigo-900 px-8 py-4 rounded-full font-bold text-lg hover:bg-slate-100 transition shadow-xl">
-          Sblocca la tua Prova Gratuita
-        </button>
+        <a href="https://calendly.com/" target="_blank" rel="noreferrer" className="inline-block bg-white text-indigo-900 px-8 py-4 rounded-full font-bold text-lg hover:bg-slate-100 transition shadow-xl">
+          Sblocca la tua Demo Gratuita
+        </a>
       </section>
 
       {/* Footer */}
