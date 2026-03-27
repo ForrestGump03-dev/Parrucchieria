@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /*?
+
+# Vieta ai crawler l'accesso alle route private se dovessero trovarne i link
+Disallow: /*/clients
+Disallow: /*/inventory
+Disallow: /*/reports
+Disallow: /*/marketing
+
+Sitemap: https://www.rootmanager.it/sitemap.xml
