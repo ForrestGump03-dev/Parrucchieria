@@ -16,6 +16,9 @@ function App() {
             <div className="hidden md:flex items-center space-x-8">
               <a href="#features" className="text-slate-600 hover:text-indigo-600 font-medium">Funzionalità</a>
               <a href="#pricing" className="text-slate-600 hover:text-indigo-600 font-medium">Prezzi</a>
+              <a href="https://app.rootfix.app/login" className="text-slate-600 hover:text-indigo-600 font-bold transition">
+                Accedi
+              </a>
               <a href="https://calendly.com/" target="_blank" rel="noreferrer" className="bg-indigo-600 text-white px-5 py-2.5 rounded-full font-semibold hover:bg-indigo-700 transition shadow-sm">
                 Prenota una Demo
               </a>
