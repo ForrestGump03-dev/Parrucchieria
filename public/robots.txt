@@ -8,4 +8,4 @@ Disallow: /*/inventory
 Disallow: /*/reports
 Disallow: /*/marketing
 
-Sitemap: https://www.rootmanager.it/sitemap.xml
+Sitemap: https://rootfix.app/sitemap.xml
