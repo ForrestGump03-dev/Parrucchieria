@@ -1,7 +1,8 @@
-import React from 'react';
-import { ArrowRight, CheckCircle2, ShieldCheck, Smartphone, Target, SplitSquareHorizontal, CalendarRange, Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowRight, CheckCircle2, ShieldCheck, Smartphone, Target, SplitSquareHorizontal, CalendarRange, Clock, X, Loader2 } from 'lucide-react';
 
 function App() {
+  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
       {/* Navigation */}
@@ -19,9 +20,9 @@ function App() {
               <a href="https://app.rootfix.app/login" className="text-slate-600 hover:text-indigo-600 font-bold transition">
                 Accedi
               </a>
-              <a href="https://calendly.com/" target="_blank" rel="noreferrer" className="bg-indigo-600 text-white px-5 py-2.5 rounded-full font-semibold hover:bg-indigo-700 transition shadow-sm">
-                Prenota una Demo
-              </a>
+              <button onClick={() => setIsDemoModalOpen(true)} className="bg-indigo-600 text-white px-5 py-2.5 rounded-full font-semibold hover:bg-indigo-700 transition shadow-sm">
+                Provalo per 7 giorni
+              </button>
             </div>
           </div>
         </div>
@@ -44,9 +45,9 @@ function App() {
             Il gestionale che azzera i "No-Show", organizza perfettamente la tua agenda e fa tornare i clienti persi. Senza nessuna commissione nascosta o portali intermediari.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-            <a href="https://calendly.com/" target="_blank" rel="noreferrer" className="bg-indigo-600 text-white px-8 py-3.5 rounded-full font-bold text-lg hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2">
-              Prenota una Demo con noi <ArrowRight size={20} />
-            </a>
+            <button onClick={() => setIsDemoModalOpen(true)} className="bg-indigo-600 text-white px-8 py-3.5 rounded-full font-bold text-lg hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2">
+              Provalo per 7 Giorni <ArrowRight size={20} />
+            </button>
             <a href="#features" className="bg-white text-slate-700 border border-slate-300 px-8 py-3.5 rounded-full font-bold text-lg hover:bg-slate-50 transition flex items-center justify-center">
               Scopri le Funzionalità
             </a>
@@ -170,10 +171,10 @@ function App() {
               <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Profilazione Clienti Premium</li>
               <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Magazzino & Statistiche Avanzate</li>
             </ul>
-            <a href="https://calendly.com/" target="_blank" rel="noreferrer" className="block w-full text-center bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 transition shadow-lg">
-              Prenota una Demo Gratuita
-            </a>
-            <p className="text-center text-slate-500 text-sm mt-4">Parlaci delle tue esigenze in videochiamata.</p>
+            <button onClick={() => setIsDemoModalOpen(true)} className="block w-full text-center bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 transition shadow-lg">
+              Provalo Gratis per 7 Giorni
+            </button>
+            <p className="text-center text-slate-500 text-sm mt-4">Inizia subito la tua prova gratuita.</p>
           </div>
         </div>
       </section>
@@ -182,9 +183,9 @@ function App() {
       <section className="bg-indigo-600 py-20 px-4 sm:px-6 lg:px-8 text-center text-white">
         <h2 className="text-3xl sm:text-4xl font-bold mb-6">Pronto a trasformare il tuo salone in un'azienda moderna?</h2>
         <p className="text-indigo-100 text-lg mb-8 max-w-2xl mx-auto">Unisciti ai saloni italiani che hanno smesso di rincorrere le telefonate e hanno iniziato a governare i propri incassi con la tecnologia.</p>
-        <a href="https://calendly.com/" target="_blank" rel="noreferrer" className="inline-block bg-white text-indigo-900 px-8 py-4 rounded-full font-bold text-lg hover:bg-slate-100 transition shadow-xl">
-          Sblocca la tua Demo Gratuita
-        </a>
+        <button onClick={() => setIsDemoModalOpen(true)} className="inline-block bg-white text-indigo-900 px-8 py-4 rounded-full font-bold text-lg hover:bg-slate-100 transition shadow-xl">
+          Sblocca la tua Demo di 7 giorni
+        </button>
       </section>
 
       {/* Footer */}
@@ -192,6 +193,7 @@ function App() {
          <p className="font-bold text-white mb-2">Root Salon Manager &copy; 2026</p>
          <p className="text-sm">Sviluppato con passione in Italia per i professionisti dell'Acconciatura.</p>
       </footer>
+      {isDemoModalOpen && <DemoModal onClose={() => setIsDemoModalOpen(false)} />}
     </div>
   );
 }
@@ -214,6 +216,106 @@ function XIcon() {
          <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
       </svg>
    )
+}
+
+function DemoModal({ onClose }: { onClose: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [successData, setSuccessData] = useState<{ email: string; password: string; start: string } | null>(null);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    
+    const email = formData.get('email') as string;
+    const name = formData.get('name') as string;
+    const test_date = formData.get('test_date') as string;
+
+    try {
+      const response = await fetch('https://shjscgzptcnnosylujay.supabase.co/functions/v1/request-demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name, test_date })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Errore durante la richiesta');
+      }
+
+      setSuccessData({ email: data.email, password: data.password, start: test_date });
+    } catch (err: any) {
+      setError(err.message || 'Errore imprevisto');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden relative" onClick={(e) => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-full transition">
+          <X size={20} />
+        </button>
+
+        {successData ? (
+          <div className="p-8 text-center space-y-6">
+            <div className="mx-auto w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center">
+              <CheckCircle2 size={32} className="text-emerald-500" />
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold text-slate-900 mb-2">Demo Pronta!</h3>
+              <p className="text-slate-600 mb-6 focus:text-slate-900">Il tuo ambiente di test isolato è stato creato con successo e scadrà automaticamente dopo 7 giorni dal {new Date(successData.start).toLocaleDateString()}.</p>
+              
+              <div className="bg-slate-50 p-4 rounded-xl text-left border border-slate-200 mb-6">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Credenziali (Salvale!)</p>
+                <div className="space-y-3 font-mono text-sm">
+                  <div><span className="text-slate-500">Email:</span> <br/><span className="font-bold text-slate-800 selection:bg-indigo-200">{successData.email}</span></div>
+                  <div><span className="text-slate-500">Password:</span> <br/><span className="font-bold text-slate-800 selection:bg-indigo-200">{successData.password}</span></div>
+                </div>
+              </div>
+
+              <a href="https://app.rootfix.app/login" className="block w-full text-center bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition">
+                Vai al Gestionale
+              </a>
+            </div>
+          </div>
+        ) : (
+          <div className="p-8">
+            <h3 className="text-2xl font-bold text-slate-900 mb-2">Inizia la tua prova</h3>
+            <p className="text-slate-600 mb-8 max-w-sm">Attiva il tuo gestionale per 7 giorni. Senza nessun impegno.</p>
+            
+            {error && <div className="mb-6 p-3 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm">{error}</div>}
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Nome Salone <span className="text-red-500">*</span></label>
+                <input required name="name" type="text" className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Es. Root Salon" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">La tua Email <span className="text-red-500">*</span></label>
+                <input required name="email" type="email" className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="tu@email.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Quando inizierai il test? <span className="text-red-500">*</span></label>
+                <input required name="test_date" type="datetime-local" className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700" />
+                <p className="text-xs text-slate-500 mt-1">Avrai 7 giorni di tempo a partire da questa data.</p>
+              </div>
+
+              <button disabled={loading} type="submit" className="w-full mt-4 flex items-center justify-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-70">
+                {loading ? <Loader2 className="animate-spin" size={20} /> : 'Genera Ambiente Demo'}
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default App;
