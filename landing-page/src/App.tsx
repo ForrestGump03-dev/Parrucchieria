@@ -32,13 +32,13 @@ function App() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-fuchsia-500"></span>
             </span>
-            L'alternativa Made in Italy ai classici portali di prenotazione
+            Root Salon Manager: Il Software per Parrucchieri
           </div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 mb-6 leading-tight">
-            Il gestionale per parrucchieri che <span className="text-indigo-600">azzera i No-Show</span> e riempie l'agenda.
+            Risolvi i problemi del tuo salone <span className="bg-gradient-to-r from-indigo-600 to-fuchsia-600 bg-clip-text text-transparent">alla radice.</span>
           </h1>
           <p className="text-lg text-slate-600 mb-8 max-w-2xl mx-auto lg:mx-0">
-            Nessuna commissione occulta. Protezione totale degli incassi, automazioni WhatsApp per il recupero clienti e Smart Booking progettato esclusivamente per le esigenze dei Saloni di Acconciatura.
+            Il gestionale che azzera i "No-Show", organizza perfettamente la tua agenda e fa tornare i clienti persi. Senza nessuna commissione nascosta o portali intermediari.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
             <a href="https://calendly.com/" target="_blank" rel="noreferrer" className="bg-indigo-600 text-white px-8 py-3.5 rounded-full font-bold text-lg hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2">
