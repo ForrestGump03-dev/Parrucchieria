@@ -1,24 +1,21 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Package, Calendar, Users, BarChart3, LogOut, Bell, Lock, Megaphone, Menu, X } from 'lucide-react';
+import { Package, Calendar, Users, BarChart3, LogOut, Bell, Settings as SettingsIcon, Megaphone, Menu, X } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { useReminders } from '../hooks/useReminders';
 import { useNotifications } from '../context/NotificationContext';
-import NotificationSettingsModal from '../components/NotificationSettingsModal';
+import SettingsModal from '../components/SettingsModal';
 import NotificationDrawer from '../components/NotificationDrawer';
-import ChangePasswordModal from '../components/ChangePasswordModal';
 
 export default function MainLayout() {
   const location = useLocation();
   const { signOut, user } = useAuth();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'security' | 'notifications'>('security');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { settings, updateSettings } = useReminders();
   const { unreadCount } = useNotifications();
 
   // Listen for Password Recovery event to force open the change password modal
@@ -26,7 +23,8 @@ export default function MainLayout() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any, _session: any) => {
       if (event === 'PASSWORD_RECOVERY') {
-        setIsPasswordModalOpen(true);
+        setSettingsTab('security');
+        setIsSettingsOpen(true);
         toast('Imposta una nuova password per completare il recupero.', { icon: '🔑' });
       }
     });
@@ -136,11 +134,14 @@ export default function MainLayout() {
           </div>
 
           <button
-            onClick={() => setIsPasswordModalOpen(true)}
+            onClick={() => {
+              setSettingsTab('security');
+              setIsSettingsOpen(true);
+            }}
             className="w-full flex items-center gap-3 px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-sm mb-1"
           >
-            <Lock size={18} />
-            <span>Cambia Password</span>
+            <SettingsIcon size={18} />
+            <span>Impostazioni</span>
           </button>
 
           <button
@@ -187,19 +188,15 @@ export default function MainLayout() {
         onClose={() => setIsDrawerOpen(false)}
         onOpenSettings={() => {
           setIsDrawerOpen(false);
+          setSettingsTab('notifications');
           setIsSettingsOpen(true);
         }}
       />
 
-      <NotificationSettingsModal
+      <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        settings={settings}
-        onUpdate={updateSettings}
-      />
-      <ChangePasswordModal
-        isOpen={isPasswordModalOpen}
-        onClose={() => setIsPasswordModalOpen(false)}
+        initialTab={settingsTab}
       />
     </div>
   );

@@ -174,7 +174,7 @@ export type NewAppointment = Omit<Appointment, 'id' | 'created_at' | 'clients'>;
 
 | Context | File | Espone | Hook di accesso |
 |---------|------|--------|-----------------|
-| `AuthContext` | `src/context/AuthContext.tsx` | `user`, `session`, `loading`, `signOut()`, `updateUserPassword()` | `useAuth()` |
+| `AuthContext` | `src/context/AuthContext.tsx` | `user`, `session`, `loading`, `signOut()`, `updateUserPassword()`. Gestisce auto-logout inattività (60 m). Gestisce AAL2 MFA TOTP. | `useAuth()` |
 | `NotificationContext` | `src/context/NotificationContext.tsx` | `notifications[]`, `unreadCount`, `addNotification()`, `markAsRead()`, `markAllAsRead()`, `removeNotification()`, `clearAll()` | `useNotifications()` |
 | `StaffContext` | `src/context/StaffContext.tsx` | `staff[]`, `loading`, `addStaff()`, `updateStaff()`, `deleteStaff()`, `refreshStaff()` | `useStaff()` (re-export da `src/hooks/useStaff.ts`) |
 | `TreatmentContext` | `src/context/TreatmentContext.tsx` | `treatments[]`, `loading`, `fetchTreatments()`, `addTreatment()`, `updateTreatment()`, `deleteTreatment()`, `seedDefaults()` | `useTreatments()` (re-export da `src/hooks/useTreatments.ts`) |
@@ -499,13 +499,18 @@ Toast con countdown per conferma eliminazione cliente dall'Agenda.
 
 Drawer laterale (slide-in da destra). Usa `useNotifications()` per tutte le azioni. Backdrop con click per chiudere. Aperto da `MainLayout` tramite icona campana con badge `unreadCount`.
 
-**Props**: `isOpen`, `onClose`, `onOpenSettings`.
+**Props**: `isOpen`, `onClose`.
 
 ---
 
-### `ChangePasswordModal` (`src/components/ChangePasswordModal.tsx`)
+### `SettingsModal` (`src/components/SettingsModal.tsx`)
 
-Cambio password via `updateUserPassword()` da `AuthContext`. Usa `react-hook-form`. Aperto automaticamente da `MainLayout` all'evento Supabase `PASSWORD_RECOVERY`.
+Modale unificato per le impostazioni utente. Accessibile dalla sidebar. Include tre tab principali:
+- **Sicurezza (2FA)**: Gestisce l'abilitazione (enrollment) e disabilitazione (unenrollment, protetta da rientro password) dell'autenticazione a due fattori TOTP (AAL2). Include banner per recupero in caso di dispositivo smarrito.
+- **Notifiche**: Configurazione di `useReminders` (suoni, anticipo, backup reminder).
+- **Password**: Cambio password.
+
+**Props**: `isOpen`, `onClose`.
 
 ---
 
@@ -522,12 +527,6 @@ CRUD collaboratori. Limite: **max 7 collaboratori** (toast errore se superato). 
 CRUD listino trattamenti. Usa `useTreatments()`. Errore localizzato su nome duplicato (codice `23505`). `ConfirmModal` per eliminazione.
 
 **Props**: `isOpen`, `onClose`.
-
----
-
-### `NotificationSettingsModal` (`src/components/NotificationSettingsModal.tsx`)
-
-Impostazioni notifiche e reminder backup. Controlla comportamento di `useReminders`.
 
 ---
 
@@ -589,6 +588,7 @@ Recupero password via OTP Supabase. Aperto da `Login`.
 
 - **Rotta**: `/login` (redirect automatico se non autenticato)
 - Autenticazione Supabase email + password. Apre `ForgotPasswordModal`.
+- **2FA TOTP**: Intercetta la risposta di login. Se l'utente ha 2FA attiva (`mfa` richiede AAL2), sopprime il redirect immediato e mostra un form PIN nativo inline per verificare il TOTP (`mfa.challenge` + `mfa.verify`), bypassando la navigazione finché la sessione non è completata.
 
 ---
 
@@ -626,7 +626,7 @@ Recupero password via OTP Supabase. Aperto da `Login`.
 
 1. `ForgotPasswordModal` → Supabase invia email con link OTP.
 2. Al ritorno nell'app → evento Supabase `PASSWORD_RECOVERY`.
-3. `MainLayout` intercetta l'evento e apre `ChangePasswordModal` automaticamente.
+3. `MainLayout` intercetta l'evento e apre `SettingsModal` automaticamente (sul tab password).
 
 ---
 
@@ -663,7 +663,7 @@ Recupero password via OTP Supabase. Aperto da `Login`.
 | `src/layout/MainLayout.tsx` | Sidebar, navigazione, campana notifiche, `PASSWORD_RECOVERY` listener |
 | `src/lib/supabase.ts` | Client Supabase (da variabili d'ambiente `VITE_*`) |
 | `src/lib/utils.ts` | `cn()` (classi CSS), `exportToCsv()` (download CSV) |
-| `src/context/AuthContext.tsx` | Auth globale — `useAuth()` |
+| `src/context/AuthContext.tsx` | Auth globale, auto-logout 60m, AAL2 middleware — `useAuth()` |
 | `src/context/NotificationContext.tsx` | Centro notifiche in-app — `useNotifications()` |
 | `src/context/StaffContext.tsx` | Gestione staff — `useStaff()` |
 | `src/context/TreatmentContext.tsx` | Listino trattamenti — `useTreatments()` |
@@ -685,8 +685,8 @@ Recupero password via OTP Supabase. Aperto da `Login`.
 | `src/components/ClientList.tsx` | Sidebar lista clienti con ricerca |
 | `src/components/StaffManagerModal.tsx` | CRUD staff (max 7) |
 | `src/components/TreatmentManagerModal.tsx` | CRUD listino trattamenti |
+| `src/components/SettingsModal.tsx` | Modale unificato impostazioni (2FA, Notifiche, Password) |
 | `src/components/NotificationDrawer.tsx` | Drawer centro notifiche |
-| `src/components/ChangePasswordModal.tsx` | Cambio password (aperto da `PASSWORD_RECOVERY`) |
 | `src/constants/treatments.ts` | Trattamenti predefiniti (seed DB) |
 | `supabase/migrations/` | Migrazioni schema DB |
 | `.github/copilot-instructions.md` | Questo file — aggiornare dopo ogni modifica significativa |

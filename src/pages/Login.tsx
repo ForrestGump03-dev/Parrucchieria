@@ -11,6 +11,11 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
 
+  // 2FA state
+  const [requiresMFA, setRequiresMFA] = useState(false);
+  const [factorId, setFactorId] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -23,12 +28,54 @@ export default function Login() {
       });
 
       if (error) throw error;
-      // Auth state change will be caught by AuthContext -> App router
+      
+      // Check if AAL2 (MFA) is required
+      const { data: factorsData, error: factorsError } = await supabase.auth.mfa.listFactors();
+      if (factorsError) throw factorsError;
+      
+      const totpFactor = factorsData.totp.find(f => f.status === 'verified');
+      
+      if (totpFactor) {
+        // We need to challenge the user for 2FA
+        setRequiresMFA(true);
+        setFactorId(totpFactor.id);
+        setLoading(false);
+        return; // Pause the login flow here
+      }
+
+      // If no 2FA required, Auth state change will be caught by AuthContext -> App router
     } catch (e: unknown) {
       console.error(e);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const err = e as any;
       setError(err.message || 'Credenziali non valide o errore di connessione.');
+    } finally {
+      if (!requiresMFA) setLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!factorId) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const challenge = await supabase.auth.mfa.challenge({ factorId });
+      if (challenge.error) throw challenge.error;
+      
+      const verify = await supabase.auth.mfa.verify({
+        factorId,
+        challengeId: challenge.data.id,
+        code: mfaCode
+      });
+      
+      if (verify.error) throw verify.error;
+      // Success! AuthContext will now pick up the AAL2 session.
+    } catch (e: unknown) {
+      console.error(e);
+      setError('Codice non valido. Riprova.');
     } finally {
       setLoading(false);
     }
@@ -56,12 +103,56 @@ export default function Login() {
 
         {/* Login Form */}
         <div className="p-8">
-           <form onSubmit={handleLogin} className="space-y-6">
-              {error && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-200">
-                  {error}
-                </div>
-              )}
+           {requiresMFA ? (
+             <form onSubmit={handleVerifyOTP} className="space-y-6 animate-in fade-in zoom-in duration-300">
+               <div className="text-center space-y-2 mb-4">
+                 <h2 className="text-lg font-bold text-slate-800">Verifica in Due Passaggi</h2>
+                 <p className="text-sm text-slate-500">Inserisci il codice a 6 cifre generato dalla tua app di autenticazione.</p>
+               </div>
+               
+               {error && (
+                 <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-200">
+                   {error}
+                 </div>
+               )}
+
+               <div className="space-y-2">
+                 <div className="relative">
+                    <input 
+                      type="text" 
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="w-full py-4 text-center border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 font-mono text-2xl tracking-[0.3em] font-bold outline-none"
+                      placeholder="000000"
+                      required
+                      autoFocus
+                    />
+                 </div>
+               </div>
+
+               <button 
+                 type="submit" 
+                 disabled={loading || mfaCode.length !== 6}
+                 className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+               >
+                 {loading ? <Loader2 className="animate-spin" size={20} /> : 'Verifica accesso'}
+               </button>
+               
+               <button 
+                 type="button" 
+                 onClick={() => { setRequiresMFA(false); setMfaCode(''); }}
+                 className="w-full text-slate-500 hover:text-slate-800 text-sm font-medium transition-colors"
+               >
+                 Annulla ed esci
+               </button>
+             </form>
+           ) : (
+             <form onSubmit={handleLogin} className="space-y-6">
+                {error && (
+                  <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-200">
+                    {error}
+                  </div>
+                )}
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700">Email</label>
@@ -127,6 +218,7 @@ export default function Login() {
               </button>
               )}
            </form>
+           )}
 
            <div className="mt-6 text-center">
              <p className="text-xs text-slate-400">
