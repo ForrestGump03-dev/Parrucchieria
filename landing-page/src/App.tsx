@@ -153,28 +153,56 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="text-3xl font-bold mb-4">Un prezzo fisso, per sempre.</h2>
-            <p className="text-slate-400 text-lg">Zero commissioni sui nuovi clienti. Zero sorprese a fine mese.</p>
+            <p className="text-slate-400 text-lg">Scegli il piano più adatto al tuo salone. Zero commissioni sui clienti, zero sorprese.</p>
           </div>
 
-          <div className="max-w-lg mx-auto bg-white text-slate-900 rounded-3xl p-8 shadow-2xl">
-            <div className="mb-6">
-              <h3 className="text-2xl font-bold">Unico Piano, Tutto Incluso</h3>
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            {/* Piano Mensile */}
+            <div className="bg-slate-800 border border-slate-700 text-white rounded-3xl p-8 shadow-xl flex flex-col">
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold text-white">Piano Mensile</h3>
+                <p className="text-slate-400 text-sm mt-2">La flessibilità di pagare mese per mese.</p>
+              </div>
+              <div className="mb-6">
+                <span className="text-5xl font-black">29€</span>
+                <span className="text-slate-500"> / mese</span>
+                <p className="text-sm text-slate-500 mt-1">+ IVA</p>
+              </div>
+              <ul className="space-y-4 mb-8 flex-1">
+                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Smart Booking & Gestione Risorse</li>
+                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Generatore Link WhatsApp Web</li>
+                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Promemoria appuntamenti</li>
+                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Magazzino & Statistiche</li>
+              </ul>
+              <button onClick={() => setIsDemoModalOpen(true)} className="block w-full text-center bg-slate-700 text-white py-4 rounded-xl font-bold text-lg hover:bg-slate-600 transition shadow-lg">
+                Inizia Prova Gratuita
+              </button>
             </div>
-            <div className="mb-6">
-              <span className="text-5xl font-black">49</span>
-              <span className="text-slate-500">/mese</span>
+
+            {/* Piano Annuale */}
+            <div className="bg-white text-slate-900 rounded-3xl p-8 shadow-2xl flex flex-col relative transform md:-translate-y-4">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-indigo-600 to-fuchsia-600 text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg">
+                PIÙ SCELTO — 2 MESI IN REGALO
+              </div>
+              <div className="mb-6 mt-2">
+                <h3 className="text-2xl font-bold">Piano Annuale</h3>
+                <p className="text-slate-500 text-sm mt-2">Massimo risparmio per far crescere il tuo salone.</p>
+              </div>
+              <div className="mb-6">
+                <span className="text-5xl font-black">290€</span>
+                <span className="text-slate-500"> / anno</span>
+                <p className="text-sm text-indigo-600 font-bold mt-1">Pari a soli 24,16€ al mese (+ IVA)</p>
+              </div>
+              <ul className="space-y-4 mb-8 flex-1">
+                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-indigo-500" /> <span className="font-bold">Tutto ciò che c'è nel mensile</span></li>
+                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Algoritmo Win-Back Clienti</li>
+                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Profilazione Clienti Premium</li>
+                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Accesso a future funzionalità in beta</li>
+              </ul>
+              <button onClick={() => setIsDemoModalOpen(true)} className="block w-full text-center bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 transition shadow-lg">
+                Provalo Gratis per 7 Giorni
+              </button>
             </div>
-            <ul className="space-y-4 mb-8">
-              <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Smart Booking & Gestione Risorse</li>
-              <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Generatore Link WhatsApp Web Istantanei </li>
-              <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Prenotazione Online & Reserve with Google</li>
-              <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Profilazione Clienti Premium</li>
-              <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Magazzino & Statistiche Avanzate</li>
-            </ul>
-            <button onClick={() => setIsDemoModalOpen(true)} className="block w-full text-center bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 transition shadow-lg">
-              Provalo Gratis per 7 Giorni
-            </button>
-            <p className="text-center text-slate-500 text-sm mt-4">Inizia subito la tua prova gratuita.</p>
           </div>
         </div>
       </section>
