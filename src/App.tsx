@@ -8,7 +8,7 @@ import Marketing from './pages/Marketing';
 import Login from './pages/Login';
 import PublicClientForm from './pages/PublicClientForm';
 import { useAuth } from './context/AuthContext';
-import DemoBlocker from './components/DemoBlocker';
+import SubscriptionBlocker from './components/SubscriptionBlocker';
 
 function App() {
   const { user, loading } = useAuth();
@@ -31,7 +31,7 @@ function App() {
              <Route path="*" element={<Navigate to="/login" replace />} />
            </>
         ) : (
-           <Route path="/" element={<DemoBlocker><MainLayout /></DemoBlocker>}>
+           <Route path="/" element={<SubscriptionBlocker><MainLayout /></SubscriptionBlocker>}>
              <Route index element={<Agenda />} />
              <Route path="clients" element={<Clients />} />
              <Route path="inventory" element={<Inventory />} />

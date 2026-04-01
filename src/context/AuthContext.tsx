@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { type User, type Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { type Subscription } from '../types';
 
 interface AuthContextType {
   session: Session | null;
   user: User | null;
+  subscription: Subscription | null;
   loading: boolean;
   signOut: () => Promise<void>;
   updateUserPassword: (password: string) => Promise<void>;
@@ -13,6 +15,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
+  subscription: null,
   loading: true,
   signOut: async () => {},
   updateUserPassword: async () => {},
@@ -21,6 +24,7 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Inactivity timeout logic (60 minutes)
@@ -58,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!currentSession) {
         setSession(null);
         setUser(null);
+        setSubscription(null);
         setLoading(false);
         return;
       }
@@ -70,16 +75,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data?.nextLevel === 'aal2' && data?.currentLevel !== 'aal2') {
           setSession(null);
           setUser(null);
+          setSubscription(null);
         } else {
           setSession(currentSession);
           setUser(currentSession.user);
           resetInactivityTimer();
+
+          // Fetch subscription data
+          const { data: subData, error: subError } = await supabase
+            .from('subscriptions')
+            .select('*')
+            .eq('user_id', currentSession.user.id)
+            .single();
+            
+          if (!subError && subData) {
+            setSubscription(subData);
+          }
         }
       } catch (err) {
         console.error("Error checking AAL:", err);
         // Fallback safe: force logout if we can't verify 2FA levels
         setSession(null);
         setUser(null);
+        setSubscription(null);
       }
       setLoading(false);
     };
@@ -136,7 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, loading, signOut, updateUserPassword }}>
+    <AuthContext.Provider value={{ session, user, subscription, loading, signOut, updateUserPassword }}>
       {children}
     </AuthContext.Provider>
   );
