@@ -2,10 +2,10 @@ import { useAuth } from '../context/AuthContext';
 import { LogOut, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useState } from 'react';
+import { StripeCheckout } from './StripeCheckout';
 
 export default function SubscriptionBlocker({ children }: { children: React.ReactNode }) {
   const { user, subscription } = useAuth();
-  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
   if (!user) {
     return <>{children}</>;
@@ -13,25 +13,6 @@ export default function SubscriptionBlocker({ children }: { children: React.Reac
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-  };
-
-  const handleCheckout = async (priceId: string) => {
-    setLoadingPlan(priceId);
-    try {
-      // Invocheremo una Edge Function per creare la sessione di Checkout
-      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-        body: { priceId }
-      });
-      if (error) throw error;
-      if (data?.url) {
-        window.location.href = data.url;
-      }
-    } catch (error) {
-      console.error('Errore durante la creazione del checkout:', error);
-      alert("C'è stato un problema di connessione al Checkout. Stiamo configurando l'infrastruttura, riprova tra poco.");
-    } finally {
-      setLoadingPlan(null);
-    }
   };
 
   const isBlocked = subscription && ['trial_expired', 'past_due', 'canceled'].includes(subscription.status);
@@ -61,13 +42,11 @@ export default function SubscriptionBlocker({ children }: { children: React.Reac
                 <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> WhatsApp Web</li>
                 <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Magazzino & Statistiche</li>
               </ul>
-              <button 
-                onClick={() => handleCheckout('price_1THQZ4Q3DnW2hP9tA4pQcQfZ')} 
-                disabled={loadingPlan !== null}
-                className="w-full bg-slate-700 hover:bg-slate-600 text-white py-4 rounded-xl font-bold text-lg transition disabled:opacity-50"
-              >
-                {loadingPlan === 'price_1THQZ4Q3DnW2hP9tA4pQcQfZ' ? 'Creazione in corso...' : 'Sblocca a 29€ / mese'}
-              </button>
+              <StripeCheckout 
+                priceId="price_1THQZ4Q3DnW2hP9tA4pQcQfZ"
+                buttonText="Sblocca a 29€ / mese"
+                className="w-full bg-slate-700 hover:bg-slate-600 text-white py-4 rounded-xl shadow-md"
+              />
             </div>
 
             {/* Piano Annuale */}
@@ -89,13 +68,11 @@ export default function SubscriptionBlocker({ children }: { children: React.Reac
                 <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Algoritmo Win-Back Clienti</li>
                 <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Accesso future funzionalità</li>
               </ul>
-              <button 
-                onClick={() => handleCheckout('price_1THQZAQ3DnW2hP9tlGaHw6hK')} 
-                disabled={loadingPlan !== null}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-xl font-bold text-lg transition disabled:opacity-50 shadow-xl"
-              >
-                 {loadingPlan === 'price_1THQZAQ3DnW2hP9tlGaHw6hK' ? 'Creazione in corso...' : 'Sblocca a 290€ / anno'}
-              </button>
+              <StripeCheckout 
+                priceId="price_1THQZAQ3DnW2hP9tlGaHw6hK"
+                buttonText="Sblocca a 290€ / anno"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-xl shadow-xl"
+              />
             </div>
           </div>
 

@@ -34,12 +34,44 @@ serve(async (req) => {
 
     console.log(`Creazione checkout per utente ${user.id} con prezzo ${priceId}`);
 
+    // Cerchiamo se l'utente ha già un customerId in Stripe (nella tabella subscriptions)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '' // Usiamo Service Role per bypassare RLS se necessario
+    );
+
+    const { data: subscription } = await supabaseAdmin
+      .from('subscriptions')
+      .select('stripe_customer_id')
+      .eq('user_id', user.id)
+      .single();
+
+    let customerId = subscription?.stripe_customer_id;
+
+    // Se non esiste un customerId, lo creiamo su Stripe
+    if (!customerId) {
+      const newCustomer = await stripe.customers.create({
+        email: user.email,
+        metadata: {
+          supabase_user_id: user.id
+        }
+      });
+      customerId = newCustomer.id;
+      
+      // Salviamo il nuovo customer_id nel DB
+      await supabaseAdmin
+        .from('subscriptions')
+        .update({ stripe_customer_id: customerId })
+        .eq('user_id', user.id);
+    }
+
     const origin = req.headers.get('origin') || 'http://localhost:5173';
 
     // Creiamo la sessione di Checkout
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'subscription',
+      customer: customerId, // Usiamo il Customer ID trovato o creato
       line_items: [{
         price: priceId,
         quantity: 1,
@@ -47,7 +79,9 @@ serve(async (req) => {
       success_url: `${origin}?payment=success`,
       cancel_url: `${origin}?payment=cancel`,
       client_reference_id: user.id, // FONDAMENTALE: collega il pagamento a questo utente
-      customer_email: user.email,
+      metadata: {
+        userId: user.id,
+      },
     });
 
     return new Response(
