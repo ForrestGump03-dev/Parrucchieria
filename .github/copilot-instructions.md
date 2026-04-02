@@ -84,8 +84,11 @@ Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile c
 | `phone` | `string` | No | Usato per ricerca duplicati |
 | `email` | `string` | Sì | |
 | `birth_date` | `string` | Sì | Data di nascita |
-| `is_vip` | `boolean` | Sì | Cliente VIP |
 | `is_active` | `boolean` | Sì | Per soft-delete |
+| `is_vip` | `boolean` | Sì | Cliente VIP |
+| `total_visits` | `number` | Sì | |
+| `total_spent` | `number` | Sì | |
+| `last_visit` | `string` | Sì | ISO timestamp |
 
 ### `appointments`
 
@@ -164,6 +167,19 @@ export interface AppNotification {
 
 export type NewClient = Omit<Client, 'id' | 'created_at'>;
 export type NewAppointment = Omit<Appointment, 'id' | 'created_at' | 'clients'>;
+
+export interface Subscription {
+  id: string;
+  user_id: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  status: string;
+  price_id: string | null;
+  current_period_end: string;
+  cancel_at_period_end: boolean;
+  created_at: string;
+  updated_at: string;
+}
 ```
 
 ---
@@ -196,8 +212,8 @@ Logica Supabase per gli appuntamenti. Non mantiene stato locale — ogni metodo 
 | Metodo | Firma | Descrizione |
 |--------|-------|-------------|
 | `addAppointment` | `(appointment: NewAppointment) => Promise<Appointment>` | INSERT con `user_id: user.id`. Lancia errore se non autenticato. |
-| `getClientHistory` | `(clientId: string) => Promise<Appointment[]>` | SELECT dove `price IS NOT NULL` — solo appuntamenti pagati, ordinati per data DESC. |
-| `getAppointmentsForRange` | `(start: Date, end: Date) => Promise<Appointment[]>` | SELECT con join `clients(*)` per il range di date. Usato dall'Agenda. |
+| `getClientHistory` | `(clientId: string) => Promise<Appointment[]>` | SELECT con condizione esatta `.not('price', 'is', null)` e ordinamento data DESC. |
+| `getAppointmentsForRange` | `(start: Date, end: Date) => Promise<Appointment[]>` | Pre-formatta date (yyyy-MM-dd) tramite `date-fns`. SELECT con join `clients(*)` combinato con `.is('price', null)` (previene bug dei mille record e filtri data errati). |
 | `deleteAppointment` | `(id: string) => Promise<void>` | DELETE per id. |
 | `updateAppointment` | `(id: string, updates: Partial<NewAppointment>) => Promise<void>` | UPDATE campi parziali. |
 | `getLastPriceForTreatment` | `(treatment: string) => Promise<number \| null>` | Recupera l'ultimo prezzo usato per un trattamento (price > 0, DESC created_at). Usato per pre-compilare il form. |
@@ -532,7 +548,7 @@ CRUD listino trattamenti. Usa `useTreatments()`. Errore localizzato su nome dupl
 
 ### `ForgotPasswordModal` (`src/components/ForgotPasswordModal.tsx`)
 
-Recupero password via OTP Supabase. Aperto da `Login`.
+Form a 2 step per il recupero della password: invio ed inserimento codice. Basato su OTP (codice di 6 cifre). Sostituisce i classici Magic Link per mitigare eventuali blocchi SMTP/Spam e per evitare l'intercettamento di eventi hash complessi (URL app) al rientro dal browser. Aperto da `Login`.
 
 ---
 
@@ -622,11 +638,12 @@ Recupero password via OTP Supabase. Aperto da `Login`.
 - Notifiche → `NotificationContext` (persistite in `localStorage`) + toast visivo.
 - Accesso dal `NotificationDrawer` (icona campana in `MainLayout`).
 
-### Recupero Password
+### Recupero Password (Nuovo Flusso OTP Manuale)
 
-1. `ForgotPasswordModal` → Supabase invia email con link OTP.
-2. Al ritorno nell'app → evento Supabase `PASSWORD_RECOVERY`.
-3. `MainLayout` intercetta l'evento e apre `SettingsModal` automaticamente (sul tab password).
+A causa di frequenti rate limit / blocchi SMTP di Supabase e filtri Spam:
+1. `ForgotPasswordModal` → Supabase invia tramite mail (`resetPasswordForEmail`) un codice OTP numerico a 6 cifre.
+2. L'utente incolla il codice a 6 cifre nello step successivo direttamente nella medesima finestra / modale dell'app.
+3. L'app usa `verifyOtp({ type: 'recovery' })` seguito da un update della password. Nessun redirect critico, nessun intercettamento in `MainLayout` necessario.
 
 ---
 
