@@ -37,6 +37,15 @@
 ### Piattaforma Web (Rimozione Electron)
 Tutte le dipendenze di Electron sono state rimosse. L'app è ora una SPA web-only progettata per essere hostata su piattaforme web standard come Vercel o Netlify.
 
+### Pagamenti e Webhook (Stripe & Edge Functions)
+- Il progetto include Edge Functions scritte in **Deno** (nella cartella `supabase/functions/`).
+- L'integrazione per i pagamenti è gestita tramite **Stripe**.
+- La funzione `create-checkout-session` gestisce l'avvio del pagamento.
+- La funzione `stripe-webhook` riceve in modo asincrono gli eventi da Stripe (es. `checkout.session.completed`).
+- **ATTENZIONE DEPLOY**: La funzione `stripe-webhook` deve essere **sempre processata e deployata aggirando l'Auth di Supabase** per permettere a Stripe di comunicare, usando il comando `npx supabase functions deploy stripe-webhook --no-verify-jwt`. Localmente, USARE `npx supabase functions serve --env-file .env.local --no-verify-jwt`.
+- Le chiavi segrete (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) vanno caricate nei *Secrets* dell'istanza Supabase (o nel `.env.local` per dev locale).
+- Non ci sono pagamenti gestiti direttamente lato client, per mantenere lo stack sicuro e conforme al backend BaaS.
+
 ### Routing
 
 Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile con il deploy su Web / PWA.
@@ -140,6 +149,22 @@ Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile c
 | `user_id` | `string` | Sì | RLS |
 | `price` | `number` | No | |
 | `duration` | `number` | No | Minuti |
+
+### `subscriptions`
+
+| Colonna | Tipo TS | Nullable | Note |
+|---------|---------|----------|------|
+| `id` | `string` | No | UUID PK |
+| `user_id` | `string` | No | FK → auth.users. Unique, RLS policy: view solo il proprio. |
+| `stripe_customer_id` | `string \| null` | Sì | ID cliente su Stripe |
+| `stripe_subscription_id` | `string \| null` | Sì | ID abbonamento di Stripe |
+| `status` | `string` | No | 'trialing', 'active', 'past_due', 'canceled', 'trial_expired' |
+| `price_id` | `string \| null` | Sì | Identificativo listino Stripe usato |
+| `current_period_end` | `string` | No | Timestamp di scadenza o rinnovo (UTC) |
+| `cancel_at_period_end`| `boolean \| null` | Sì | Flag per rinnovo automatico cancellato |
+| `created_at` | `string` | No | Iso Timestamp |
+| `updated_at` | `string` | No | Mantenuta aggiornata da trigger/webhook |
+| — | — | — | Dati mantenuti sincronizzati tramite la webhook di Stripe |
 
 ### Tipi Ausiliari
 
@@ -664,6 +689,7 @@ Recupero password via OTP Supabase. Aperto da `Login`.
 | `src/lib/supabase.ts` | Client Supabase (da variabili d'ambiente `VITE_*`) |
 | `src/lib/utils.ts` | `cn()` (classi CSS), `exportToCsv()` (download CSV) |
 | `src/context/AuthContext.tsx` | Auth globale, auto-logout 60m, AAL2 middleware — `useAuth()` |
+| `src/components/SubscriptionBlocker.tsx` | Componente HOC/Guard per bloccare la vista e forzare i pagamenti se il periodo di prova (attualmente 7 giorni default) è scaduto, tramite la lettura di `subscriptions` |
 | `src/context/NotificationContext.tsx` | Centro notifiche in-app — `useNotifications()` |
 | `src/context/StaffContext.tsx` | Gestione staff — `useStaff()` |
 | `src/context/TreatmentContext.tsx` | Listino trattamenti — `useTreatments()` |
