@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { type Appointment, type NewAppointment } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -42,11 +43,15 @@ export function useAppointments() {
   }, []);
 
   const getAppointmentsForRange = useCallback(async (start: Date, end: Date) => {
+     const startStr = format(start, 'yyyy-MM-dd');
+     const endStr = format(end, 'yyyy-MM-dd');
+
      const { data, error } = await supabase
       .from('appointments')
       .select('*, clients(*)') // Join with clients to show name in calendar
-      .gte('date', start.toISOString())
-      .lte('date', end.toISOString());
+      .is('price', null)
+      .gte('date', startStr)
+      .lte('date', endStr);
       
     if (error) throw error;
     return data as Appointment[];
