@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { useNotifications } from '../context/NotificationContext';
 import SettingsModal from '../components/SettingsModal';
 import NotificationDrawer from '../components/NotificationDrawer';
+import FeedbackModal from '../components/FeedbackModal';
 
 export default function MainLayout() {
   const location = useLocation();
@@ -16,6 +17,7 @@ export default function MainLayout() {
   const [settingsTab, setSettingsTab] = useState<'security' | 'notifications'>('security');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const { unreadCount } = useNotifications();
 
   // Listen for Password Recovery event to force open the change password modal
@@ -36,7 +38,6 @@ export default function MainLayout() {
     { path: '/clients', label: 'Clienti & Cassa', icon: Users },
     { path: '/inventory', label: 'Magazzino', icon: Package },
     { path: '/reports', label: 'Report & Analisi', icon: BarChart3 },
-    { path: '/marketing', label: 'Marketing & IA', icon: Megaphone },
   ];
 
   // Close mobile menu when route changes
@@ -134,6 +135,14 @@ export default function MainLayout() {
           </div>
 
           <button
+            onClick={() => setIsFeedbackOpen(true)}
+            className="w-full flex items-center gap-3 px-4 py-2 text-indigo-400 font-medium hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-sm mb-1"
+          >
+            <Megaphone size={18} />
+            <span>Invia Feedback</span>
+          </button>
+
+          <button
             onClick={() => {
               setSettingsTab('security');
               setIsSettingsOpen(true);
@@ -197,6 +206,11 @@ export default function MainLayout() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         initialTab={settingsTab}
+      />
+
+      <FeedbackModal 
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
       />
     </div>
   );

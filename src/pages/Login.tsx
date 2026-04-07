@@ -9,40 +9,55 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   // 2FA state
   const [requiresMFA, setRequiresMFA] = useState(false);
   const [factorId, setFactorId] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setSuccess(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      if (authMode === 'register') {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw error;
+        setSuccess('Registrazione completata! Se è richiesta la verifica, controlla la tua email. Altrimenti puoi accedere.');
+        setAuthMode('login');
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-      if (error) throw error;
-      
-      // Check if AAL2 (MFA) is required
-      const { data: factorsData, error: factorsError } = await supabase.auth.mfa.listFactors();
-      if (factorsError) throw factorsError;
-      
-      const totpFactor = factorsData.totp.find(f => f.status === 'verified');
-      
-      if (totpFactor) {
-        // We need to challenge the user for 2FA
-        setRequiresMFA(true);
-        setFactorId(totpFactor.id);
-        setLoading(false);
-        return; // Pause the login flow here
+        if (error) throw error;
       }
-
+      
+      // se eravamo in login, controlla 2FA
+      if (authMode === 'login') {
+        // Check if AAL2 (MFA) is required
+        const { data: factorsData, error: factorsError } = await supabase.auth.mfa.listFactors();
+        if (factorsError) throw factorsError;
+        
+        const totpFactor = factorsData.totp.find(f => f.status === 'verified');
+        
+        if (totpFactor) {
+          // We need to challenge the user for 2FA
+          setRequiresMFA(true);
+          setFactorId(totpFactor.id);
+          setLoading(false);
+          return; // Pause the login flow here
+        }
+      }
       // If no 2FA required, Auth state change will be caught by AuthContext -> App router
     } catch (e: unknown) {
       console.error(e);
@@ -98,8 +113,28 @@ export default function Login() {
              <img src="/splash.png" alt="Root Logo" className="max-w-full max-h-full object-contain drop-shadow-lg" />
           </div>
           <h1 className="text-2xl font-bold text-white">Root Salon Manager</h1>
-          <p className="text-indigo-200 text-sm mt-2">Accedi al tuo spazio di lavoro</p>
+          <p className="text-indigo-200 text-sm mt-2">Versione Beta Gratuita</p>
         </div>
+
+        {/* Tab Switcher */}
+        {!requiresMFA && (
+          <div className="flex border-b border-slate-200">
+            <button
+              type="button"
+              className={`flex-1 py-4 text-sm font-semibold transition-colors ${authMode === 'login' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+              onClick={() => { setAuthMode('login'); setError(null); setSuccess(null); }}
+            >
+              Accedi
+            </button>
+            <button
+              type="button"
+              className={`flex-1 py-4 text-sm font-semibold transition-colors ${authMode === 'register' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+              onClick={() => { setAuthMode('register'); setError(null); setSuccess(null); }}
+            >
+              Registrati (Beta)
+            </button>
+          </div>
+        )}
 
         {/* Login Form */}
         <div className="p-8">
@@ -146,11 +181,16 @@ export default function Login() {
                  Annulla ed esci
                </button>
              </form>
-           ) : (
-             <form onSubmit={handleLogin} className="space-y-6">
+            ) : (
+              <form onSubmit={handleAuth} className="space-y-6">
                 {error && (
                   <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-200">
                     {error}
+                  </div>
+                )}
+                {success && (
+                  <div className="bg-emerald-50 text-emerald-600 p-3 rounded-lg text-sm border border-emerald-200">
+                    {success}
                   </div>
                 )}
 
@@ -186,26 +226,28 @@ export default function Login() {
                 </div>
               </div>
 
-              <div className="flex justify-end">
-                <button 
-                  type="button" 
-                  onClick={() => setIsForgotModalOpen(true)}
-                  className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1"
-                >
-                  <HelpCircle size={12} />
-                  Password dimenticata?
-                </button>
-              </div>
+              {authMode === 'login' && (
+                <div className="flex justify-end">
+                  <button 
+                    type="button" 
+                    onClick={() => setIsForgotModalOpen(true)}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1"
+                  >
+                    <HelpCircle size={12} />
+                    Password dimenticata?
+                  </button>
+                </div>
+              )}
 
               <button 
                 type="submit" 
                 disabled={loading}
                 className="w-full bg-slate-900 text-white py-3 rounded-xl font-semibold hover:bg-slate-800 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                {loading ? <Loader2 className="animate-spin" size={20} /> : 'Accedi'}
+                {loading ? <Loader2 className="animate-spin" size={20} /> : (authMode === 'login' ? 'Accedi' : 'Iscriviti Ora')}
               </button>
 
-              {import.meta.env.DEV && (
+              {import.meta.env.DEV && authMode === 'login' && (
               <button
                 type="button"
                 onClick={() => {

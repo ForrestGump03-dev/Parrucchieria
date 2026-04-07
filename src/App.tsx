@@ -4,11 +4,9 @@ import Agenda from './pages/Agenda';
 import Clients from './pages/Clients';
 import Reports from './pages/Reports';
 import Inventory from './pages/Inventory';
-import Marketing from './pages/Marketing';
 import Login from './pages/Login';
 import PublicClientForm from './pages/PublicClientForm';
 import { useAuth } from './context/AuthContext';
-import SubscriptionBlocker from './components/SubscriptionBlocker';
 
 function App() {
   const { user, loading } = useAuth();
@@ -31,12 +29,11 @@ function App() {
              <Route path="*" element={<Navigate to="/login" replace />} />
            </>
         ) : (
-           <Route path="/" element={<SubscriptionBlocker><MainLayout /></SubscriptionBlocker>}>
+           <Route path="/" element={<MainLayout />}>
              <Route index element={<Agenda />} />
              <Route path="clients" element={<Clients />} />
              <Route path="inventory" element={<Inventory />} />
              <Route path="reports" element={<Reports />} />
-             <Route path="marketing" element={<Marketing />} />
              <Route path="login" element={<Navigate to="/" replace />} />
            </Route>
         )}

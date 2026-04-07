@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { X, Lock, Save, Eye, EyeOff, Shield, Bell, Database, Users, AlertTriangle, Smartphone, Loader2, CheckCircle2, CreditCard } from 'lucide-react';
+import { X, Lock, Save, Eye, EyeOff, Shield, Bell, Database, Users, AlertTriangle, Smartphone, Loader2, CheckCircle2, QrCode } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useReminders } from '../hooks/useReminders';
-import { StripeCheckout } from './StripeCheckout';
+import QRCode from 'react-qr-code';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'security' | 'notifications' | 'billing';
+  initialTab?: 'security' | 'notifications' | 'qrcode';
 }
 
 interface PasswordFormData {
@@ -20,8 +20,8 @@ interface PasswordFormData {
 }
 
 export default function SettingsModal({ isOpen, onClose, initialTab = 'security' }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'security' | 'notifications' | 'billing'>(initialTab);
-  const { updateUserPassword, session, subscription } = useAuth();
+  const [activeTab, setActiveTab] = useState<'security' | 'notifications' | 'qrcode'>(initialTab);
+  const { updateUserPassword, session } = useAuth();
   const { settings, updateSettings } = useReminders();
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<PasswordFormData>();
   
@@ -196,10 +196,10 @@ export default function SettingsModal({ isOpen, onClose, initialTab = 'security'
               <Bell size={18} /> Notifiche & Backup
             </button>
             <button
-              onClick={() => setActiveTab('billing')}
-              className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors shrink-0 text-sm font-medium w-full text-left ${activeTab === 'billing' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}
+              onClick={() => setActiveTab('qrcode')}
+              className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors shrink-0 text-sm font-medium w-full text-left ${activeTab === 'qrcode' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}
             >
-              <CreditCard size={18} /> Abbonamento
+              <QrCode size={18} /> QR & Booking
             </button>
           </div>
         </div>
@@ -457,103 +457,32 @@ export default function SettingsModal({ isOpen, onClose, initialTab = 'security'
             </div>
           )}
 
-          {activeTab === 'billing' && (
+          {activeTab === 'qrcode' && session?.user && (
             <div className="p-6 md:p-8 space-y-8 max-w-2xl">
                <div>
                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-1">
-                    <CreditCard size={20} className="text-indigo-600" /> Abbonamento e Fatturazione
+                    <QrCode size={20} className="text-indigo-600" /> Prenotazione Clienti Rapida
                  </h3>
-                 <p className="text-sm text-slate-500">Gestisci il tuo piano, visualizza lo stato dell'abbonamento e passa alla versione Premium completa.</p>
+                 <p className="text-sm text-slate-500">Condividi questo QR Code per far iscrivere in autonomia i tuoi clienti.</p>
                </div>
-
-               {subscription && (
-                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-6">
-                   <div className="flex items-center justify-between mb-6">
-                     <div>
-                       <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Piano Attuale</h4>
-                       <div className="flex items-center gap-3 mt-1">
-                         <span className="text-2xl font-black text-slate-800">
-                           {subscription.status === 'trialing' ? 'Modalità Demo' : 
-                            subscription.status === 'active' ? 'Premium' : 
-                            'Abbonamento Sospeso/Scaduto'}
-                         </span>
-                         {subscription.status === 'active' && (
-                           <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
-                             <CheckCircle2 size={12} /> Attivo
-                           </span>
-                         )}
-                       </div>
-                     </div>
-                     {subscription.status === 'trialing' && (
-                       <span className="bg-fuchsia-100 text-fuchsia-700 text-xs font-bold px-3 py-1.5 rounded-full border border-fuchsia-200">
-                         {Math.max(0, Math.ceil((new Date(subscription.current_period_end).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} giorni rimanenti
-                       </span>
-                     )}
-                   </div>
-
-                   {/* Se l'utente è ancora in Demo, mostriamo le opzioni di upgrade */}
-                   {subscription.status === 'trialing' && (
-                     <div className="mt-8 border-t border-slate-200 pt-6">
-                       <h4 className="font-bold text-lg mb-4 text-slate-800">Sblocca tutte le funzionalità</h4>
-                       <div className="grid sm:grid-cols-2 gap-4">
-                         
-                         {/* Mensile */}
-                         <div className="bg-white border border-slate-200 rounded-xl p-5 hover:border-indigo-300 transition-colors shadow-sm flex flex-col pt-6">
-                           <div className="mb-4">
-                             <div className="font-bold text-slate-800 text-lg">Mensile</div>
-                             <div className="text-2xl font-black mt-1">29€<span className="text-sm font-normal text-slate-500">/mese</span></div>
-                           </div>
-                           <ul className="space-y-2 mb-6 flex-1 text-sm text-slate-600">
-                             <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-emerald-500 mt-0.5 shrink-0" /> Booking Illimitato</li>
-                             <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-emerald-500 mt-0.5 shrink-0" /> WhatsApp Web</li>
-                             <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-emerald-500 mt-0.5 shrink-0" /> Analisi Dati base</li>
-                           </ul>
-                           <StripeCheckout 
-                             priceId="price_1THQZ4Q3DnW2hP9tA4pQcQfZ"
-                             buttonText="Sblocca a 29€"
-                             className="w-full bg-slate-800 hover:bg-slate-700 text-white py-2.5 rounded-lg text-sm py-3"
-                           />
-                         </div>
-
-                         {/* Annuale */}
-                         <div className="bg-gradient-to-b from-indigo-50 to-white border-2 border-indigo-600 rounded-xl p-5 shadow-md flex flex-col relative pt-6">
-                           <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-indigo-600 text-white px-3 py-0.5 rounded-full text-xs font-bold whitespace-nowrap">
-                             PIÙ CONVENIENTE
-                           </div>
-                           <div className="mb-4">
-                             <div className="font-bold text-slate-800 text-lg">Annuale</div>
-                             <div className="text-2xl font-black mt-1 text-indigo-700">290€<span className="text-sm font-normal text-slate-500">/anno</span></div>
-                             <div className="text-xs text-indigo-600 font-semibold mt-1">Solo 24,16€ al mese</div>
-                           </div>
-                           <ul className="space-y-2 mb-6 flex-1 text-sm text-slate-800 font-medium">
-                             <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-indigo-600 mt-0.5 shrink-0" /> Tutto il piano mensile</li>
-                             <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-indigo-600 mt-0.5 shrink-0" /> Algoritmo Win-Back</li>
-                             <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-indigo-600 mt-0.5 shrink-0" /> 2 Mesi in regalo</li>
-                           </ul>
-                           <StripeCheckout 
-                             priceId="price_1THQZAQ3DnW2hP9tlGaHw6hK"
-                             buttonText="Sblocca a 290€"
-                             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm shadow-md py-3"
-                           />
-                         </div>
-
-                       </div>
-                     </div>
-                   )}
-
-                   {/* Se l'utente ha già un abbonamento attivo o scaduto */}
-                   {subscription.status !== 'trialing' && (
-                     <div className="mt-6 border-t border-slate-200 pt-6">
-                       <p className="text-sm text-slate-600 mb-4 font-medium">
-                         Per gestire il tuo abbonamento, aggiornare i metodi di pagamento o scaricare le fatture, accedi al portale clienti Stripe sicuro.
-                       </p>
-                       <a href="mailto:alessio.forestieri03@gmail.com" className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-                         Assistenza Fatturazione
-                       </a>
-                     </div>
-                   )}
-                 </div>
-               )}
+               
+               <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 flex flex-col items-center text-center shadow-sm">
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 mb-6 inline-block">
+                     <QRCode value={`https://app.rootfix.app/qr/${session.user.id}`} size={200} />
+                  </div>
+                  <h4 className="font-bold text-slate-800 text-lg mb-2">Link Diretto</h4>
+                  <p className="text-sm text-slate-500 mb-6 bg-white px-4 py-2 rounded-lg border border-slate-200 select-all max-w-full overflow-hidden text-ellipsis shadow-inner">
+                     https://app.rootfix.app/qr/{session.user.id}
+                  </p>
+                  <a 
+                    href={`https://app.rootfix.app/qr/${session.user.id}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 transition shadow-sm"
+                  >
+                    Apri Form 
+                  </a>
+               </div>
             </div>
           )}
         </div>
