@@ -44,6 +44,15 @@ Tutte le dipendenze di Electron sono state rimosse. L'app è ora una SPA web-onl
 - **ATTENZIONE DEPLOY**: La funzione Edge deve usare le variabili d'ambiente fornite nei Secrets di Supabase. `npx supabase secrets set TELEGRAM_BOT_TOKEN="xxx" TELEGRAM_CHAT_ID="xxx"` e poi eseguire il deploy con `npx supabase functions deploy telegram-webhook`.
 - Nessun pagamento o limitazione di prova è gestito o misurato nel sistema (Beta illimitata).
 
+### Email Transazionali (Resend SMTP)
+- Le email di autenticazione (conferma registrazione, reset password) sono inviate tramite **Resend** come provider SMTP personalizzato.
+- **Configurazione**: Supabase Dashboard → Authentication → Settings → SMTP Settings.
+- **Dominio verificato**: `rootfix.app` (DNS configurato su Cloudflare con record MX, TXT, CNAME forniti da Resend).
+- **Mittente**: `Root Salon Manager <noreply@rootfix.app>`.
+- **Verifica email obbligatoria**: `Confirm email` è attivo — gli utenti devono cliccare il link nell'email prima di poter fare login.
+- **Site URL**: configurato su `https://app.rootfix.app` in Supabase → Authentication → URL Configuration.
+- **Template email**: personalizzati in italiano in Supabase → Authentication → Email Templates.
+
 ### Routing
 
 Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile con il deploy su Web / PWA.
@@ -626,6 +635,7 @@ Modale per l'invio di feedback da parte degli utenti della Beta. Accessibile dal
 
 - **Rotta**: `/login` (redirect automatico se non autenticato)
 - **Tab Login/Registrazione**: L'interfaccia include due tab. La tab "Accedi" gestisce il login con `supabase.auth.signInWithPassword()`. La tab "Registrati" permette la creazione di un nuovo account con `supabase.auth.signUp()`, abilitando l'auto-registrazione per la Beta Gratuita.
+- **Verifica email obbligatoria**: Dopo la registrazione, l'utente riceve un'email di conferma (via Resend SMTP). Senza cliccare il link di conferma, il login viene rifiutato da Supabase. Il messaggio post-registrazione invita a controllare l'email.
 - Apre `ForgotPasswordModal` per il recupero password.
 - **2FA TOTP**: Intercetta la risposta di login. Se l'utente ha 2FA attiva (`mfa` richiede AAL2), sopprime il redirect immediato e mostra un form PIN nativo inline per verificare il TOTP (`mfa.challenge` + `mfa.verify`), bypassando la navigazione finché la sessione non è completata.
 

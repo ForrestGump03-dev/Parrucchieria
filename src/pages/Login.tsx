@@ -31,7 +31,7 @@ export default function Login() {
           password,
         });
         if (error) throw error;
-        setSuccess('Registrazione completata! Se è richiesta la verifica, controlla la tua email. Altrimenti puoi accedere.');
+        setSuccess('Registrazione completata! Controlla la tua email per la verifica.');
         setAuthMode('login');
       } else {
         const { error } = await supabase.auth.signInWithPassword({
