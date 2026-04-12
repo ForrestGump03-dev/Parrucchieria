@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { X, Lock, Save, Eye, EyeOff, Shield, Bell, Database, Users, AlertTriangle, Smartphone, Loader2, CheckCircle2 } from 'lucide-react';
+import { X, Lock, Save, Eye, EyeOff, Shield, Bell, Database, Users, AlertTriangle, Smartphone, Loader2, CheckCircle2, QrCode } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useReminders } from '../hooks/useReminders';
+import QRCode from 'react-qr-code';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'security' | 'notifications';
+  initialTab?: 'security' | 'notifications' | 'qrcode';
 }
 
 interface PasswordFormData {
@@ -19,7 +20,7 @@ interface PasswordFormData {
 }
 
 export default function SettingsModal({ isOpen, onClose, initialTab = 'security' }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'security' | 'notifications'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'security' | 'notifications' | 'qrcode'>(initialTab);
   const { updateUserPassword, session } = useAuth();
   const { settings, updateSettings } = useReminders();
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<PasswordFormData>();
@@ -193,6 +194,12 @@ export default function SettingsModal({ isOpen, onClose, initialTab = 'security'
               className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors shrink-0 text-sm font-medium w-full text-left ${activeTab === 'notifications' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}
             >
               <Bell size={18} /> Notifiche & Backup
+            </button>
+            <button
+              onClick={() => setActiveTab('qrcode')}
+              className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors shrink-0 text-sm font-medium w-full text-left ${activeTab === 'qrcode' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}`}
+            >
+              <QrCode size={18} /> QR & Booking
             </button>
           </div>
         </div>
@@ -447,6 +454,35 @@ export default function SettingsModal({ isOpen, onClose, initialTab = 'security'
                       </select>
                    </div>
                 </div>
+            </div>
+          )}
+
+          {activeTab === 'qrcode' && session?.user && (
+            <div className="p-6 md:p-8 space-y-8 max-w-2xl">
+               <div>
+                 <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-1">
+                    <QrCode size={20} className="text-indigo-600" /> Prenotazione Clienti Rapida
+                 </h3>
+                 <p className="text-sm text-slate-500">Condividi questo QR Code per far iscrivere in autonomia i tuoi clienti.</p>
+               </div>
+               
+               <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 flex flex-col items-center text-center shadow-sm">
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 mb-6 inline-block">
+                     <QRCode value={`https://app.rootfix.app/qr/${session.user.id}`} size={200} />
+                  </div>
+                  <h4 className="font-bold text-slate-800 text-lg mb-2">Link Diretto</h4>
+                  <p className="text-sm text-slate-500 mb-6 bg-white px-4 py-2 rounded-lg border border-slate-200 select-all max-w-full overflow-hidden text-ellipsis shadow-inner">
+                     https://app.rootfix.app/qr/{session.user.id}
+                  </p>
+                  <a 
+                    href={`https://app.rootfix.app/qr/${session.user.id}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 transition shadow-sm"
+                  >
+                    Apri Form 
+                  </a>
+               </div>
             </div>
           )}
         </div>

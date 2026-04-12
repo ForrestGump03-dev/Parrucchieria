@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { ArrowRight, CheckCircle2, ShieldCheck, Smartphone, Target, SplitSquareHorizontal, CalendarRange, Clock, X, Loader2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ShieldCheck, Smartphone, Target, SplitSquareHorizontal, CalendarRange, Clock, Menu, X } from 'lucide-react';
 
 function App() {
-  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
       {/* Navigation */}
@@ -16,16 +16,34 @@ function App() {
             </div>
             <div className="hidden md:flex items-center space-x-8">
               <a href="#features" className="text-slate-600 hover:text-indigo-600 font-medium">Funzionalità</a>
-              <a href="#pricing" className="text-slate-600 hover:text-indigo-600 font-medium">Prezzi</a>
               <a href="https://app.rootfix.app/login" className="text-slate-600 hover:text-indigo-600 font-bold transition">
                 Accedi
               </a>
-              <button onClick={() => setIsDemoModalOpen(true)} className="bg-indigo-600 text-white px-5 py-2.5 rounded-full font-semibold hover:bg-indigo-700 transition shadow-sm">
-                Provalo per 7 giorni
+              <a href="https://app.rootfix.app/login" className="bg-indigo-600 text-white px-5 py-2.5 rounded-full font-semibold hover:bg-indigo-700 transition shadow-sm">
+                Iscriviti alla Beta
+              </a>
+            </div>
+
+            {/* Mobile Menu Button */}
+            <div className="md:hidden flex items-center">
+              <button 
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="text-slate-600 hover:text-indigo-600 p-2"
+              >
+                {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
               </button>
             </div>
           </div>
         </div>
+
+        {/* Mobile Menu */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden bg-white border-b border-slate-200 px-4 pt-2 pb-4 space-y-3 shadow-lg">
+            <a href="#features" onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-indigo-600 hover:bg-indigo-50">Funzionalità</a>
+            <a href="https://app.rootfix.app/login" className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-indigo-600 hover:bg-indigo-50">Accedi</a>
+            <a href="https://app.rootfix.app/login" className="block w-full text-center mt-2 bg-indigo-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-sm">Iscriviti alla Beta</a>
+          </div>
+        )}
       </nav>
 
       {/* Hero Section */}
@@ -45,9 +63,9 @@ function App() {
             Il gestionale che azzera i "No-Show", organizza perfettamente la tua agenda e fa tornare i clienti persi. Senza nessuna commissione nascosta o portali intermediari.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-            <button onClick={() => setIsDemoModalOpen(true)} className="bg-indigo-600 text-white px-8 py-3.5 rounded-full font-bold text-lg hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2">
-              Provalo per 7 Giorni <ArrowRight size={20} />
-            </button>
+            <a href="https://app.rootfix.app/login" className="bg-indigo-600 text-white px-8 py-3.5 rounded-full font-bold text-lg hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2">
+              Entra nella Beta Gratuita <ArrowRight size={20} />
+            </a>
             <a href="#features" className="bg-white text-slate-700 border border-slate-300 px-8 py-3.5 rounded-full font-bold text-lg hover:bg-slate-50 transition flex items-center justify-center">
               Scopri le Funzionalità
             </a>
@@ -148,72 +166,13 @@ function App() {
          </div>
       </section>
 
-      {/* Pricing Section */}
-      <section id="pricing" className="py-24 bg-slate-900 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-3xl font-bold mb-4">Un prezzo fisso, per sempre.</h2>
-            <p className="text-slate-400 text-lg">Scegli il piano più adatto al tuo salone. Zero commissioni sui clienti, zero sorprese.</p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            {/* Piano Mensile */}
-            <div className="bg-slate-800 border border-slate-700 text-white rounded-3xl p-8 shadow-xl flex flex-col">
-              <div className="mb-6">
-                <h3 className="text-2xl font-bold text-white">Piano Mensile</h3>
-                <p className="text-slate-400 text-sm mt-2">La flessibilità di pagare mese per mese.</p>
-              </div>
-              <div className="mb-6">
-                <span className="text-5xl font-black">29€</span>
-                <span className="text-slate-500"> / mese</span>
-                <p className="text-sm text-slate-500 mt-1">+ IVA</p>
-              </div>
-              <ul className="space-y-4 mb-8 flex-1">
-                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Smart Booking & Gestione Risorse</li>
-                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Generatore Link WhatsApp Web</li>
-                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Promemoria appuntamenti</li>
-                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Magazzino & Statistiche</li>
-              </ul>
-              <button onClick={() => setIsDemoModalOpen(true)} className="block w-full text-center bg-slate-700 text-white py-4 rounded-xl font-bold text-lg hover:bg-slate-600 transition shadow-lg">
-                Inizia Prova Gratuita
-              </button>
-            </div>
-
-            {/* Piano Annuale */}
-            <div className="bg-white text-slate-900 rounded-3xl p-8 shadow-2xl flex flex-col relative transform md:-translate-y-4">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-indigo-600 to-fuchsia-600 text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg">
-                PIÙ SCELTO — 2 MESI IN REGALO
-              </div>
-              <div className="mb-6 mt-2">
-                <h3 className="text-2xl font-bold">Piano Annuale</h3>
-                <p className="text-slate-500 text-sm mt-2">Massimo risparmio per far crescere il tuo salone.</p>
-              </div>
-              <div className="mb-6">
-                <span className="text-5xl font-black">290€</span>
-                <span className="text-slate-500"> / anno</span>
-                <p className="text-sm text-indigo-600 font-bold mt-1">Pari a soli 24,16€ al mese (+ IVA)</p>
-              </div>
-              <ul className="space-y-4 mb-8 flex-1">
-                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-indigo-500" /> <span className="font-bold">Tutto ciò che c'è nel mensile</span></li>
-                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Algoritmo Win-Back Clienti</li>
-                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Profilazione Clienti Premium</li>
-                <li className="flex items-center gap-3"><CheckCircle2 size={20} className="text-emerald-500" /> Accesso a future funzionalità in beta</li>
-              </ul>
-              <button onClick={() => setIsDemoModalOpen(true)} className="block w-full text-center bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 transition shadow-lg">
-                Provalo Gratis per 7 Giorni
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Call to Action */}
       <section className="bg-indigo-600 py-20 px-4 sm:px-6 lg:px-8 text-center text-white">
         <h2 className="text-3xl sm:text-4xl font-bold mb-6">Pronto a trasformare il tuo salone in un'azienda moderna?</h2>
-        <p className="text-indigo-100 text-lg mb-8 max-w-2xl mx-auto">Unisciti ai saloni italiani che hanno smesso di rincorrere le telefonate e hanno iniziato a governare i propri incassi con la tecnologia.</p>
-        <button onClick={() => setIsDemoModalOpen(true)} className="inline-block bg-white text-indigo-900 px-8 py-4 rounded-full font-bold text-lg hover:bg-slate-100 transition shadow-xl">
-          Sblocca la tua Demo di 7 giorni
-        </button>
+        <p className="text-indigo-100 text-lg mb-8 max-w-2xl mx-auto">Unisciti ai saloni italiani che stanno partecipando alla nostra Beta Gratuita limitata.</p>
+        <a href="https://app.rootfix.app/login" className="inline-block bg-white text-indigo-900 px-8 py-4 rounded-full font-bold text-lg hover:bg-slate-100 transition shadow-xl">
+          Iscriviti Ora
+        </a>
       </section>
 
       {/* Footer */}
@@ -221,7 +180,6 @@ function App() {
          <p className="font-bold text-white mb-2">Root Salon Manager &copy; 2026</p>
          <p className="text-sm">Sviluppato con passione in Italia per i professionisti dell'Acconciatura.</p>
       </footer>
-      {isDemoModalOpen && <DemoModal onClose={() => setIsDemoModalOpen(false)} />}
     </div>
   );
 }
@@ -244,106 +202,6 @@ function XIcon() {
          <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
       </svg>
    )
-}
-
-function DemoModal({ onClose }: { onClose: () => void }) {
-  const [loading, setLoading] = useState(false);
-  const [successData, setSuccessData] = useState<{ email: string; password: string; start: string } | null>(null);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    
-    const email = formData.get('email') as string;
-    const name = formData.get('name') as string;
-    const test_date = formData.get('test_date') as string;
-
-    try {
-      const response = await fetch('https://shjscgzptcnnosylujay.supabase.co/functions/v1/request-demo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name, test_date })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Errore durante la richiesta');
-      }
-
-      setSuccessData({ email: data.email, password: data.password, start: test_date });
-    } catch (err: any) {
-      setError(err.message || 'Errore imprevisto');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden relative" onClick={(e) => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-full transition">
-          <X size={20} />
-        </button>
-
-        {successData ? (
-          <div className="p-8 text-center space-y-6">
-            <div className="mx-auto w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center">
-              <CheckCircle2 size={32} className="text-emerald-500" />
-            </div>
-            <div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-2">Demo Pronta!</h3>
-              <p className="text-slate-600 mb-6 focus:text-slate-900">Il tuo ambiente di test isolato è stato creato con successo e scadrà automaticamente dopo 7 giorni dal {new Date(successData.start).toLocaleDateString()}.</p>
-              
-              <div className="bg-slate-50 p-4 rounded-xl text-left border border-slate-200 mb-6">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Credenziali (Salvale!)</p>
-                <div className="space-y-3 font-mono text-sm">
-                  <div><span className="text-slate-500">Email:</span> <br/><span className="font-bold text-slate-800 selection:bg-indigo-200">{successData.email}</span></div>
-                  <div><span className="text-slate-500">Password:</span> <br/><span className="font-bold text-slate-800 selection:bg-indigo-200">{successData.password}</span></div>
-                </div>
-              </div>
-
-              <a href="https://app.rootfix.app/login" className="block w-full text-center bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition">
-                Vai al Gestionale
-              </a>
-            </div>
-          </div>
-        ) : (
-          <div className="p-8">
-            <h3 className="text-2xl font-bold text-slate-900 mb-2">Inizia la tua prova</h3>
-            <p className="text-slate-600 mb-8 max-w-sm">Attiva il tuo gestionale per 7 giorni. Senza nessun impegno.</p>
-            
-            {error && <div className="mb-6 p-3 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm">{error}</div>}
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Nome Salone <span className="text-red-500">*</span></label>
-                <input required name="name" type="text" className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Es. Root Salon" />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">La tua Email <span className="text-red-500">*</span></label>
-                <input required name="email" type="email" className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="tu@email.com" />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Quando inizierai il test? <span className="text-red-500">*</span></label>
-                <input required name="test_date" type="datetime-local" className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700" />
-                <p className="text-xs text-slate-500 mt-1">Avrai 7 giorni di tempo a partire da questa data.</p>
-              </div>
-
-              <button disabled={loading} type="submit" className="w-full mt-4 flex items-center justify-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-70">
-                {loading ? <Loader2 className="animate-spin" size={20} /> : 'Genera Ambiente Demo'}
-              </button>
-            </form>
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 export default App;

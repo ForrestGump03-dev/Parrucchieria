@@ -37,6 +37,13 @@
 ### Piattaforma Web (Rimozione Electron)
 Tutte le dipendenze di Electron sono state rimosse. L'app è ora una SPA web-only progettata per essere hostata su piattaforme web standard come Vercel o Netlify.
 
+### Edge Functions & Webhooks (Notifiche Telegram)
+- Il progetto include Edge Functions scritte in **Deno** (nella cartella `supabase/functions/`).
+- La logica SaaS/Stripe (precedentemente implementata) è stata del tutto **rimossa** a favore di una **Beta Aperta Gratuita**.
+- La funzione `telegram-webhook` riceve in modo asincrono i Webhook dal database (es. `INSERT` su `auth.users` o `public.user_feedbacks`).
+- **ATTENZIONE DEPLOY**: La funzione Edge deve usare le variabili d'ambiente fornite nei Secrets di Supabase. `npx supabase secrets set TELEGRAM_BOT_TOKEN="xxx" TELEGRAM_CHAT_ID="xxx"` e poi eseguire il deploy con `npx supabase functions deploy telegram-webhook`.
+- Nessun pagamento o limitazione di prova è gestito o misurato nel sistema (Beta illimitata).
+
 ### Routing
 
 Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile con il deploy su Web / PWA.
@@ -143,6 +150,21 @@ Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile c
 | `user_id` | `string` | Sì | RLS |
 | `price` | `number` | No | |
 | `duration` | `number` | No | Minuti |
+
+### `user_feedbacks`
+
+| Colonna | Tipo TS | Nullable | Note |
+|---------|---------|----------|------|
+| `id` | `string` | No | UUID PK |
+| `created_at` | `string` | No | Iso Timestamp |
+| `user_id` | `string` | No | FK → auth.users. RLS policy: insert e view solo il proprio. |
+| `type` | `string` | No | 'bug', 'idea', 'other' |
+| `title` | `string` | No | Titolo breve |
+| `description` | `string` | No | Testo completo del feedback |
+
+### `subscriptions` *(Deprecata)*
+
+La tabella esiste ancora a causa dei vecchi trigger di registrazione, ma i dati al suo interno non vengono più utilizzati per bloccare l'applicazione in quanto l'applicazione è entrata in fase Beta Gratuita limitless. Nessun blocco basato su Stripe o tier plan è in funzione.
 
 ### Tipi Ausiliari
 
