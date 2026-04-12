@@ -55,7 +55,6 @@ Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile c
 | `/inventory` | `<Inventory />` | Magazzino |
 | `/reports` | `<Reports />` | Report & Analisi |
 | `/qr/:salonId` | `<PublicClientForm />` | Form Pubblico (Accesso QR) |
-| `/marketing`| `<Marketing />` | Marketing & IA |
 | `/login` | `<Login />` | — (solo se non autenticato) |
 
 ### Supabase & RLS (CRITICO)
@@ -543,10 +542,11 @@ Drawer laterale (slide-in da destra). Usa `useNotifications()` per tutte le azio
 
 ### `SettingsModal` (`src/components/SettingsModal.tsx`)
 
-Modale unificato per le impostazioni utente. Accessibile dalla sidebar. Include tre tab principali:
+Modale unificato per le impostazioni utente. Accessibile dalla sidebar. Include quattro aree principali:
 - **Sicurezza (2FA)**: Gestisce l'abilitazione (enrollment) e disabilitazione (unenrollment, protetta da rientro password) dell'autenticazione a due fattori TOTP (AAL2). Include banner per recupero in caso di dispositivo smarrito.
 - **Notifiche**: Configurazione di `useReminders` (suoni, anticipo, backup reminder).
 - **Password**: Cambio password.
+- **QR Code & Link Pubblico**: Generazione e stampa del QR Code per la registrazione pubblica dei clienti (`/qr/:salonId`). Link diretto copiabile e visualizzazione QR inline. Spostato qui dalla rimossa pagina Marketing.
 
 **Props**: `isOpen`, `onClose`.
 
@@ -571,6 +571,22 @@ CRUD listino trattamenti. Usa `useTreatments()`. Errore localizzato su nome dupl
 ### `ForgotPasswordModal` (`src/components/ForgotPasswordModal.tsx`)
 
 Form a 2 step per il recupero della password: invio ed inserimento codice. Basato su OTP (codice di 6 cifre). Sostituisce i classici Magic Link per mitigare eventuali blocchi SMTP/Spam e per evitare l'intercettamento di eventi hash complessi (URL app) al rientro dal browser. Aperto da `Login`.
+
+---
+
+### `FeedbackModal` (`src/components/FeedbackModal.tsx`)
+
+Modale per l'invio di feedback da parte degli utenti della Beta. Accessibile dal pulsante "Invia Feedback" nella sidebar (`MainLayout`).
+
+**Categorie**: `bug` (⚠ Problema), `idea` (💡 Nuova Idea), `other` (💬 Altro).
+
+**Comportamento**:
+- Form con selezione categoria (`type`), titolo e descrizione testuale.
+- INSERT nella tabella `user_feedbacks` con `user_id: user.id`.
+- Nessun upload di file/screenshot (per preservare il piano gratuito Supabase Storage).
+- L'inserimento scatena un Database Webhook che invoca la Edge Function `telegram-webhook`, inviando una notifica in tempo reale al bot Telegram del titolare.
+
+**Props**: `isOpen`, `onClose`.
 
 ---
 
@@ -625,7 +641,8 @@ Form a 2 step per il recupero della password: invio ed inserimento codice. Basat
 ### `Login` (`src/pages/Login.tsx`)
 
 - **Rotta**: `/login` (redirect automatico se non autenticato)
-- Autenticazione Supabase email + password. Apre `ForgotPasswordModal`.
+- **Tab Login/Registrazione**: L'interfaccia include due tab. La tab "Accedi" gestisce il login con `supabase.auth.signInWithPassword()`. La tab "Registrati" permette la creazione di un nuovo account con `supabase.auth.signUp()`, abilitando l'auto-registrazione per la Beta Gratuita.
+- Apre `ForgotPasswordModal` per il recupero password.
 - **2FA TOTP**: Intercetta la risposta di login. Se l'utente ha 2FA attiva (`mfa` richiede AAL2), sopprime il redirect immediato e mostra un form PIN nativo inline per verificare il TOTP (`mfa.challenge` + `mfa.verify`), bypassando la navigazione finché la sessione non è completata.
 
 ---
@@ -684,7 +701,31 @@ A causa di frequenti rate limit / blocchi SMTP di Supabase e filtri Spam:
 
 ---
 
-## 11. Workflow Comuni
+## 11. Hosting & Deploy
+
+| Risorsa | Dominio | Piattaforma | Branch Git |
+|---------|---------|-------------|------------|
+| Landing Page | `rootfix.app` | Cloudflare Pages | `main` |
+| App Gestionale | `app.rootfix.app` | Cloudflare Pages | `main` |
+| Backend / DB | — | Supabase (progetto `hnzdualaqcqbnozvxrcb`) | — |
+| Edge Functions | — | Supabase Edge Functions (Deno) | Deploy manuale via CLI |
+
+### SEO
+- **`sitemap.xml`** e **`robots.txt`** sono presenti in `landing-page/public/` (serviti su `rootfix.app`).
+- La sitemap include `https://rootfix.app/` e `https://app.rootfix.app/login`.
+- Le rotte protette dell'app (`/clients`, `/inventory`, ecc.) non sono nella sitemap perché richiedono autenticazione.
+- Il link sitemap per Google Search Console è: `https://rootfix.app/sitemap.xml`.
+
+### Deploy Edge Functions
+```bash
+npx supabase link --project-ref hnzdualaqcqbnozvxrcb
+npx supabase secrets set TELEGRAM_BOT_TOKEN="xxx" TELEGRAM_CHAT_ID="xxx"
+npx supabase functions deploy telegram-webhook
+```
+
+---
+
+## 12. Workflow Comuni
 
 - **Dev**: `npm run dev` — avvia Vite su porta 5173.
 - **Build**: `npm run build` — TypeScript build + Vite build per ambiente di produzione web.
@@ -693,7 +734,7 @@ A causa di frequenti rate limit / blocchi SMTP di Supabase e filtri Spam:
 
 ---
 
-## 12. File Chiave — Riferimento Rapido
+## 13. File Chiave — Riferimento Rapido
 
 | File | Ruolo |
 |------|-------|
@@ -724,8 +765,12 @@ A causa di frequenti rate limit / blocchi SMTP di Supabase e filtri Spam:
 | `src/components/ClientList.tsx` | Sidebar lista clienti con ricerca |
 | `src/components/StaffManagerModal.tsx` | CRUD staff (max 7) |
 | `src/components/TreatmentManagerModal.tsx` | CRUD listino trattamenti |
-| `src/components/SettingsModal.tsx` | Modale unificato impostazioni (2FA, Notifiche, Password) |
+| `src/components/SettingsModal.tsx` | Modale unificato impostazioni (2FA, Notifiche, Password, QR Code) |
+| `src/components/FeedbackModal.tsx` | Modale invio feedback categorizzato (bug/idea/altro) → notifica Telegram |
 | `src/components/NotificationDrawer.tsx` | Drawer centro notifiche |
 | `src/constants/treatments.ts` | Trattamenti predefiniti (seed DB) |
+| `supabase/functions/telegram-webhook/index.ts` | Edge Function per notifiche Telegram (nuovi utenti + feedback) |
 | `supabase/migrations/` | Migrazioni schema DB |
+| `landing-page/public/sitemap.xml` | Sitemap per Google Search Console (`rootfix.app`) |
+| `landing-page/public/robots.txt` | Robots.txt per crawler (`rootfix.app`) |
 | `.github/copilot-instructions.md` | Questo file — aggiornare dopo ogni modifica significativa |
