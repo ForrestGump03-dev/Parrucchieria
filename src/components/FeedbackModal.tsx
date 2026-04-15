@@ -37,8 +37,8 @@ export default function FeedbackModal({ isOpen, onClose }: Props) {
       toast.success('Feedback inviato con successo! Grazie per il tuo contributo.');
       setMessage('');
       onClose();
-    } catch (error: any) {
-      toast.error('Errore durante l\'invio: ' + error.message);
+    } catch (error) {
+      toast.error('Errore durante l\'invio: ' + (error instanceof Error ? error.message : 'Errore sconosciuto'));
     } finally {
       setLoading(false);
     }

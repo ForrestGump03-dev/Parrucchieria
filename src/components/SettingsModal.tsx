@@ -174,7 +174,7 @@ export default function SettingsModal({ isOpen, onClose, initialTab = 'security'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col md:flex-row h-[80vh] md:h-auto max-h-[800px] animate-in fade-in zoom-in duration-200">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[85vh] max-h-[90vh] animate-in fade-in zoom-in duration-200">
         
         {/* Sidebar */}
         <div className="w-full md:w-64 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0 flex-none h-auto">

@@ -390,6 +390,7 @@ export default function Agenda() {
             time: "Ora",
             event: "Evento",
             noEventsInRange: "Nessun appuntamento in questo periodo",
+            showMore: (total) => `+${total} altri`,
           }}
         />
 
