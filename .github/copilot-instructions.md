@@ -27,6 +27,7 @@
 | recharts | ^3.7.0 | Grafici in Reports |
 | react-hot-toast | ^2.6.0 | Toast notifiche |
 | lucide-react | ^0.562.0 | Icone |
+| html5-qrcode | ^2.3.8 | Scansione codici a barre fotocamera |
 | clsx + tailwind-merge | ^2.1.1 / ^3.4.0 | Utility classi CSS (`cn()`) |
 | Vite | ^7.2.4 | Build tool / dev server |
 
@@ -71,7 +72,7 @@ Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile c
 - Tutte le tabelle hanno **Row Level Security** abilitata.
 - **Letture**: filtrate automaticamente dal token Supabase dell'utente. Non serve filtro manuale per `user_id`.
 - **Scritture**: iniettare **SEMPRE** `user_id: user.id` nel payload di ogni `insert`. Senza questo i dati non vengono salvati (RLS blocca la riga).
-- **Form Pubblici e Utenti Anonimi (ANTI-IDOR)**: Poiché le policy RLS bloccano gli inserimenti/modifiche per il ruolo `anon`, la pagina di registrazione pubblica (QR Code) non invia query dirette via Supabase JS. Utilizza invece una **Postgres Function (`SECURITY DEFINER`)** chiamata `public_register_client` che il client invoca tramite `supabase.rpc()`. Questa funzione si occupa in sicurezza dell'Anti-Duplicati prima di effettuare operazioni di INSERT/UPDATE sicure bypassando l'RLS per gli utenti non loggati.
+- **Form Pubblici e Utenti Anonimi (ANTI-IDOR)**: Poiché le policy RLS bloccano gli inserimenti/modifiche per il ruolo `anon`, la pagina di registrazione pubblica (QR Code) non invia query dirette via Supabase JS. Utilizza invece una **Postgres Function (`SECURITY DEFINER`)** chiamata `public_register_client` che il client invoca tramite `supabase.rpc()`. Questa funzione si occupa in sicurezza dell'Anti-Duplicati prima di effettuare operazioni di INSERT/UPDATE sicure bypassando l'RLS per gli utenti non loggati, e **genera e restituisce un Codice Cliente Univoco (`unique_code`)** da mostrare in Salone.
 - **Accesso utente**: `const { user } = useAuth()` — non chiamare Supabase direttamente nei componenti.
 - **Variabili d'ambiente**: `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` nel file `.env`. Il client è in `src/lib/supabase.ts`.
 
@@ -97,8 +98,10 @@ Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile c
 | `first_name` | `string` | No | |
 | `last_name` | `string` | No | |
 | `phone` | `string` | No | Usato per ricerca duplicati |
+| `unique_code` | `string` | Sì | Codice univoco cliente generato durante registrazione QR |
 | `email` | `string` | Sì | |
 | `birth_date` | `string` | Sì | Data di nascita |
+| `birth_month`| `number` | Sì | Virtual/Computed column derivata da `birth_date` via SQL per ottimizzare filtri lato DB. |
 | `is_vip` | `boolean` | Sì | Cliente VIP |
 | `is_active` | `boolean` | Sì | Per soft-delete |
 
@@ -132,7 +135,7 @@ Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile c
 | `cost_price` | `number` | Sì | Prezzo acquisto |
 | `stock` | `number` | No | Quantità disponibile |
 | `min_stock` | `number` | Sì | Soglia alert scorte basse |
-| `barcode` | `string` | Sì | |
+| `barcode` | `string` | Sì | Codice a barre scansionabile (EAN/UPC) |
 
 ### `staff_members`
 
@@ -248,7 +251,7 @@ Mantiene stato locale `clients[]` sincronizzato con Supabase.
 | `totalCount` | `number` | Numero totale esatto dei clienti attivi, utile per la UI di paginazione. |
 | `loading` | `boolean` | Stato caricamento iniziale o durante il fetch della pagina. |
 | `error` | `string \| null` | Messaggio errore fetch. |
-| `fetchClients(options)` | `Promise<void>` | Ri-fetcha da Supabase filtrando per `is_active = true`. Accetta opzioni `{ page, limit, search, sortOrder, activeTab }`. |
+| `fetchClients(options)` | `Promise<void>` | Ri-fetcha da Supabase filtrando per `is_active = true`. Accetta opzioni `{ page, limit, search, sortOrder, activeTab }`. La `search` supporta query su nome, cognome, telefono o **`unique_code`**. Tab `birthdays` sfrutta `birth_month`. |
 | `addClient(client)` | `Promise<Client>` | INSERT con `user_id: user.id`. Aggiorna stato locale ottimisticamente. |
 | `updateClient(id, updates)` | `Promise<Client>` | UPDATE + aggiorna stato locale. |
 | `deleteClient(id)` | `Promise<void>` | *Soft delete*: Imposta `is_active` a false. Verifica autenticazione come `addClient`. |
@@ -635,6 +638,7 @@ Modale per l'invio di feedback da parte degli utenti della Beta. Accessibile dal
 
 - **Rotta**: `/login` (redirect automatico se non autenticato)
 - **Tab Login/Registrazione**: L'interfaccia include due tab. La tab "Accedi" gestisce il login con `supabase.auth.signInWithPassword()`. La tab "Registrati" permette la creazione di un nuovo account con `supabase.auth.signUp()`, abilitando l'auto-registrazione per la Beta Gratuita.
+- **Errori Auth Localizzati**: Usa la funzione `translateAuthError` per fornire feedback in italiano sui requisiti della password (es. min. caratteri) o errori comuni definiti da Supabase.
 - **Verifica email obbligatoria**: Dopo la registrazione, l'utente riceve un'email di conferma (via Resend SMTP). Senza cliccare il link di conferma, il login viene rifiutato da Supabase. Il messaggio post-registrazione invita a controllare l'email.
 - Apre `ForgotPasswordModal` per il recupero password.
 - **2FA TOTP**: Intercetta la risposta di login. Se l'utente ha 2FA attiva (`mfa` richiede AAL2), sopprime il redirect immediato e mostra un form PIN nativo inline per verificare il TOTP (`mfa.challenge` + `mfa.verify`), bypassando la navigazione finché la sessione non è completata.
@@ -755,7 +759,8 @@ npx supabase functions deploy telegram-webhook
 | `src/components/AppointmentForm.tsx` | Form checkout + storico cliente raggruppato per data |
 | `src/components/ClientDetailView.tsx` | Vista full-screen registro dettagliato clienti, espandibile per appuntamento |
 | `src/components/ConfirmModal.tsx` | Modale conferma operazioni distruttive (`isDanger` → rosso) |
-| `src/components/ClientList.tsx` | Sidebar lista clienti con ricerca |
+| `src/components/ClientList.tsx` | Sidebar lista clienti con ricerca e filtro compleanni ottimizzato |
+| `src/components/BarcodeScanner.tsx` | Scansione tramite fotocamera (libreria `html5-qrcode`) |
 | `src/components/StaffManagerModal.tsx` | CRUD staff (max 7) |
 | `src/components/TreatmentManagerModal.tsx` | CRUD listino trattamenti |
 | `src/components/SettingsModal.tsx` | Modale unificato impostazioni (2FA, Notifiche, Password, QR Code) |
