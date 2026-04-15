@@ -22,8 +22,7 @@ export default function MainLayout() {
 
   // Listen for Password Recovery event to force open the change password modal
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any, _session: any) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setSettingsTab('security');
         setIsSettingsOpen(true);
@@ -40,10 +39,7 @@ export default function MainLayout() {
     { path: '/reports', label: 'Report & Analisi', icon: BarChart3 },
   ];
 
-  // Close mobile menu when route changes
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [location.pathname]);
+  // No need for location.pathname effect here since we added onClick to nav links
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
@@ -96,6 +92,7 @@ export default function MainLayout() {
               <Link
                 key={item.path}
                 to={item.path}
+                onClick={() => setIsMobileMenuOpen(false)}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
                   isActive
