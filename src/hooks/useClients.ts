@@ -35,12 +35,12 @@ export function useClients() {
         .eq('is_active', true);
 
       if (search) {
-        query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,phone.ilike.%${search}%`);
+        query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,phone.ilike.%${search}%,unique_code.ilike.%${search}%`);
       }
 
       if (activeTab === 'birthdays') {
         const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
-        query = query.like('birth_date', `%-${currentMonth}-%`);
+        query = query.eq('birth_month', currentMonth);
       }
 
       if (sortOrder === 'recent') {

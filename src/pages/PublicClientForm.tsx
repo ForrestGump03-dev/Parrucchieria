@@ -22,6 +22,7 @@ export default function PublicClientForm() {
   const { salonId } = useParams(); // URL format: /qr/:salonId
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uniqueCode, setUniqueCode] = useState<string | null>(null);
 
   const { register, handleSubmit, formState: { errors } } = useForm<PublicClientFormType>({
     resolver: zodResolver(publicClientSchema)
@@ -36,7 +37,7 @@ export default function PublicClientForm() {
 
     setIsSubmitting(true);
     try {
-      const { error: rpcError } = await supabase.rpc('public_register_client', {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('public_register_client', {
         p_salon_id: salonId,
         p_first_name: data.first_name,
         p_last_name: data.last_name,
@@ -47,6 +48,11 @@ export default function PublicClientForm() {
 
       if (rpcError) throw rpcError;
       
+      const responseData = rpcData as { unique_code?: string };
+      if (responseData?.unique_code) {
+        setUniqueCode(responseData.unique_code);
+      }
+
       setIsSubmitted(true);
 
     } catch (err: unknown) {
@@ -68,6 +74,15 @@ export default function PublicClientForm() {
                 <CheckCircle size={40} />
             </div>
             <h1 className="text-2xl font-bold text-slate-800 mb-2">Sei nella Lista VIP!</h1>
+            
+            {uniqueCode && (
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-6">
+                <p className="text-sm text-indigo-800 mb-1 font-medium">Il tuo codice cliente è:</p>
+                <p className="text-3xl font-black text-indigo-600 tracking-wider font-mono">{uniqueCode}</p>
+                <p className="text-xs text-indigo-600/80 mt-2">Mostralo in cassa per essere riconosciuto velocemente!</p>
+              </div>
+            )}
+
             <p className="text-slate-600 mb-8">
                 Grazie per esserti registrato. Riceverai presto le nostre promozioni e novità esclusive direttamente su WhatsApp.
             </p>

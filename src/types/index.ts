@@ -5,6 +5,7 @@ export interface Client {
   last_name: string;
   phone: string;
   email?: string | null;
+  unique_code?: string;
   birth_date?: string | null;
   is_active?: boolean;
   is_vip?: boolean;
