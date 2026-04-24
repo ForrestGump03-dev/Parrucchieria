@@ -199,8 +199,6 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
         setValue('birth_date', selectedClient.birth_date || '');
         setValue('date', format(new Date(), 'yyyy-MM-dd'));
         // Load staff from last appointment? No, simplified.
-        setSelectedServices([]);
-        setSelectedProducts([]);
       }
       fetchHistory(selectedClient.id);
     } else {
@@ -999,10 +997,9 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                                        return (
                                            <div key={item.id} className={`p-4 flex items-center justify-between hover:bg-slate-50 transition-colors ${editingId === item.id ? 'bg-indigo-50/60' : ''}`}>
                                                <div className="flex-1">
-                                                   <div className="flex items-center gap-2 mb-1">
+                                                   <div className="mb-1">
                                                        <span className="font-medium text-indigo-900">{item.treatment}</span>
                                                        <span className="text-slate-400 text-xs">•</span>
-                                                       <span className="text-slate-500 text-xs">{format(new Date(item.date), 'HH:mm')}</span>
                                                    </div>
                                                    
                                                    {sold.length > 0 && (
