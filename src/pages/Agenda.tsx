@@ -47,7 +47,7 @@ const localizer = dateFnsLocalizer({
 const DnDCalendar = withDragAndDrop<CalendarEvent, Resource>(Calendar);
 
 const parseDateTime = (dateStr: string, timeStr: string) => {
-  return new Date(`${dateStr}T${timeStr}:00`);
+  return parse(`${dateStr} ${timeStr}`, 'yyyy-MM-dd HH:mm', new Date());
 };
 
 export default function Agenda() {
