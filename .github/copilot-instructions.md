@@ -82,6 +82,7 @@ Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile c
 - I componenti non chiamano mai `supabase` direttamente (eccezione tollerata: `Reports.tsx` per operazioni di seed dati di test).
 - Join: `select('*, tabella_correlata(*)')` — es. `appointments` con `clients(*)` e `staff_members(*)`.
 - Decremento stock prodotti via Supabase RPC: `supabase.rpc('decrement_stock', { p_id, quantity })`.
+- **Limite 1000 righe Supabase**: Di default, le chiamate `.select()` di Supabase ritornano al massimo 1000 righe. Quando si devono scaricare tutti i record storici (es. in `useStats` o `useDetailedReport` per calcolare KPI o liste complete), è **OBBLIGATORIO** utilizzare un ciclo di paginazione con `.range(start, end)` unito al modifier `ascending: true/false`. Questo previene il troncamento dei dati più recenti. Il limite delle 1000 righe scala senza problemi in Multi-Tenant perché le query sono filtrate alla base tramite RLS per il singolo salone.
 
 ---
 
