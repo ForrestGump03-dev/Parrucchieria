@@ -57,23 +57,40 @@ export function useDetailedReport() {
   const fetchDetailedReport = useCallback(async (range: DateRange) => {
     setLoading(true);
     try {
-      // Fetch TUTTI gli appuntamenti pagati (price IS NOT NULL) con join clienti e staff.
-      // Uguale a useStats ma teniamo i dati raw per la vista dettagliata.
-      const { data: allData, error } = await supabase
-        .from('appointments')
-        .select(`
-          id, date, start_time, treatment, price, notes, client_id, products_sold,
-          clients (id, first_name, last_name, phone),
-          staff_members (name)
-        `)
-        .not('price', 'is', null)
-        .order('date', { ascending: true });
-
-      if (error) throw error;
-      if (!allData) return;
-
+      // Fetch TUTTI gli appuntamenti pagati con paginazione per aggirare il limite di 1000 righe di Supabase
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows = allData as any[];
+      let rows: any[] = [];
+      let hasMore = true;
+      let page = 0;
+      const pageSize = 1000;
+
+      while (hasMore) {
+        const { data: pageData, error } = await supabase
+          .from('appointments')
+          .select(`
+            id, date, start_time, treatment, price, notes, client_id, products_sold,
+            clients (id, first_name, last_name, phone),
+            staff_members (name)
+          `)
+          .not('price', 'is', null)
+          .order('date', { ascending: true })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (error) throw error;
+        
+        if (pageData && pageData.length > 0) {
+          rows = rows.concat(pageData);
+          if (pageData.length < pageSize) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      if (rows.length === 0) return;
 
       const rangeStart = startOfDay(range.start);
 

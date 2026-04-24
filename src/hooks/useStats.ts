@@ -76,21 +76,41 @@ export function useStats() {
       const prevRangeStart = subDays(currentRange.start, dayDiff);
       const prevRangeEnd = subDays(currentRange.end, dayDiff); 
 
-      // Fetch all PAID appointments (price is not null)
-      const { data, error } = await supabase
-        .from('appointments')
-        .select(`
-            *,
-            clients (id, first_name, last_name),
-            staff_members (id, name)
-        `)
-        .not('price', 'is', null) 
-        .order('date', { ascending: true }); // ASC important for timeline
+      // Fetch all PAID appointments with pagination to bypass the 1000-row Supabase limit
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let allAppointments: any[] = [];
+      let hasMore = true;
+      let page = 0;
+      const pageSize = 1000;
 
-      if (error) throw error;
-      if (!data) return;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('appointments')
+          .select(`
+              *,
+              clients (id, first_name, last_name),
+              staff_members (id, name)
+          `)
+          .not('price', 'is', null) 
+          .order('date', { ascending: true }) // ASC important for timeline
+          .range(page * pageSize, (page + 1) * pageSize - 1);
 
-      const appointments = data;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allAppointments = allAppointments.concat(data);
+          if (data.length < pageSize) {
+            hasMore = false; // Last page reached
+          } else {
+            page++; // Fetch next page
+          }
+        } else {
+          hasMore = false; // No more data
+        }
+      }
+
+      const appointments = allAppointments;
+      if (appointments.length === 0) return;
 
       // 1. Calculate Global Counters (Fixed)
       let todayRev = 0;
