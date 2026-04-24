@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { parseBusinessDate } from '../lib/date';
 import { type Client } from '../types';
 
 export interface WinbackCandidate extends Client {
@@ -31,7 +32,7 @@ export function useWinback(daysThreshold = 60) {
             // 2. Group by client and find max date
             const latestDates: Record<string, string> = {};
             appointments.forEach(app => {
-                if (!latestDates[app.client_id] || new Date(app.date) > new Date(latestDates[app.client_id])) {
+                if (!latestDates[app.client_id] || app.date > latestDates[app.client_id]) {
                     latestDates[app.client_id] = app.date;
                 }
             });
@@ -44,7 +45,7 @@ export function useWinback(daysThreshold = 60) {
             const candidateInfo: { id: string; last_visit: string; days_since: number }[] = [];
             
             Object.entries(latestDates).forEach(([clientId, lastDateStr]) => {
-                const lastDate = new Date(lastDateStr);
+                const lastDate = parseBusinessDate(lastDateStr);
                 const diffTime = now.getTime() - lastDate.getTime();
                 const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
                 

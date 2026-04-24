@@ -6,6 +6,7 @@ import ClientDetailView from '../components/ClientDetailView';
 import toast from 'react-hot-toast';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, parse, startOfDay, endOfDay, isValid } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { formatBusinessDate, getTodayBusinessDate, parseBusinessDate } from '../lib/date';
 import { createCsvString } from '../lib/utils';
 import { generateExcelReport } from '../utils/generateExcelReport';
 import JSZip from 'jszip';
@@ -87,7 +88,7 @@ export default function Reports() {
 
       if (finalClients.length === 0) throw new Error("Impossibile recuperare clienti di test");
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTodayBusinessDate();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const appointments: any[] = [];
 
@@ -562,7 +563,7 @@ export default function Reports() {
                           </div>
                           <div className="text-xs text-slate-500">
                              {clientViewMode === 'sleep' 
-                                ? format(new Date(c.lastVisit), 'dd/MM/yyyy')
+                                 ? format(parseBusinessDate(c.lastVisit), 'dd/MM/yyyy')
                                 : `€ ${c.spent.toFixed(2)}`
                              }
                           </div>
@@ -599,9 +600,9 @@ function BackupSection({ range }: BackupSectionProps) {
             // --- USER REPORT (Clean Data for selected range) ---
             const { data: reportData, error: reportError } = await supabase
                 .from('appointments')
-                .select('date, start_time, treatment, price, notes, clients(first_name, last_name), staff_members(name)')
-                .gte('date', range.start.toISOString())
-                .lte('date', range.end.toISOString())
+                .select('date, start_time, treatment, price, notes, clients(id, first_name, last_name), staff_members(name)')
+                .gte('date', formatBusinessDate(range.start))
+                .lte('date', formatBusinessDate(range.end))
                 .not('price', 'is', null) // Only paid
                 .order('date', { ascending: false });
             

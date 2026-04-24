@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type BaseSyntheticEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { X, Save, Clock, UserPlus, ArrowLeft, Trash2, Settings, Star, Package, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -11,6 +11,7 @@ import { useStaff } from '../hooks/useStaff';
 import TreatmentManagerModal from './TreatmentManagerModal';
 import StaffManagerModal from './StaffManagerModal';
 import ConfirmModal from './ConfirmModal';
+import { formatBusinessDate, getTodayBusinessDate, parseBusinessDate } from '../lib/date';
 import { addMinutes, format } from 'date-fns';
 
 interface AgendaModalProps {
@@ -59,6 +60,17 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
   
   const [submitting, setSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [duplicateConfirm, setDuplicateConfirm] = useState<{
+    isOpen: boolean;
+    message: string;
+    existingClient: Client | null;
+    pendingFormData: NewClientFormData | null;
+  }>({
+    isOpen: false,
+    message: '',
+    existingClient: null,
+    pendingFormData: null
+  });
 
   // Multi-service state
   const [selectedServices, setSelectedServices] = useState<ServiceItem[]>([]);
@@ -174,34 +186,38 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
     }
   };
 
-  const onNewClientSubmit = async (data: NewClientFormData) => {
+  const onNewClientSubmit = async (data: NewClientFormData, eventOrBypass?: BaseSyntheticEvent | boolean) => {
+    const bypassDuplicateCheck = eventOrBypass === true;
     setSubmitting(true);
     try {
       // 1. Strict Duplicate Check (Phone)
-      if (data.phone && data.phone.length > 5) {
+      if (!bypassDuplicateCheck && data.phone && data.phone.length > 5) {
         const existing = await getClientByPhone(data.phone);
         if (existing) {
-          toast.error(`Cliente già esistente: ${existing.first_name} ${existing.last_name}`);
-          const userWantsToUseExisting = confirm(`Il numero ${data.phone} è già associato a ${existing.first_name} ${existing.last_name}. Vuoi usare questo cliente esistente?`);
-          if (userWantsToUseExisting) {
-            setSelectedClient(existing);
-            setStep('details');
-            setSubmitting(false);
-            return;
-          }
+          setDuplicateConfirm({
+             isOpen: true,
+             message: `Il numero ${data.phone} è già associato a ${existing.first_name} ${existing.last_name}. Vuoi usare questo cliente esistente?`,
+             existingClient: existing,
+             pendingFormData: data
+          });
+          setSubmitting(false);
+          return;
         }
       } else {
         // 2. Soft Duplicate Check (Name)
-        const possibleDupes = await findPotentialDuplicates(data.first_name, data.last_name);
-        if (possibleDupes.length > 0) {
-           const match = possibleDupes[0];
-           const useExisting = confirm(`Esiste già un cliente chiamato "${match.first_name} ${match.last_name}" (ma senza telefono o con telefono diverso). Vuoi usare quello esistente per evitare clonazioni?`);
-           if (useExisting) {
-              setSelectedClient(match);
-              setStep('details');
-              setSubmitting(false);
-              return;
-           }
+        if (!bypassDuplicateCheck) {
+            const possibleDupes = await findPotentialDuplicates(data.first_name, data.last_name);
+            if (possibleDupes.length > 0) {
+               const match = possibleDupes[0];
+               setDuplicateConfirm({
+                 isOpen: true,
+                 message: `Esiste già un cliente chiamato "${match.first_name} ${match.last_name}" (ma senza telefono o con telefono diverso). Vuoi usare quello esistente per evitare clonazioni?`,
+                 existingClient: match,
+                 pendingFormData: data
+               });
+               setSubmitting(false);
+               return;
+            }
         }
       }
 
@@ -236,7 +252,8 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
 
     setSubmitting(true);
     try {
-      const dateStr = (appointmentToEdit ? appointmentToEdit.date : initialDate?.toISOString().split('T')[0]) || new Date().toISOString().split('T')[0];
+      const dateStr = appointmentToEdit?.date
+        ?? (initialDate ? formatBusinessDate(initialDate) : getTodayBusinessDate());
       
       // Sequential time logic initialization
       let currentStartTime = data.start_time;
@@ -327,7 +344,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
       
       let msg = '';
       if (type === 'reminder') {
-          const formattedDate = appointmentToEdit?.date ? format(new Date(appointmentToEdit.date), 'dd/MM/yyyy') : 'presto';
+          const formattedDate = appointmentToEdit?.date ? format(parseBusinessDate(appointmentToEdit.date), 'dd/MM/yyyy') : 'presto';
           const time = appointmentToEdit?.start_time ? ` alle ${appointmentToEdit.start_time}` : '';
           msg = `Ciao ${selectedClient.first_name}, ti ricordiamo il tuo appuntamento nel nostro salone il ${formattedDate}${time}. Per qualsiasi informazione, non esitare a contattarci! A presto.`;
       } else if (type === 'review') {
@@ -669,6 +686,31 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
         isDanger={true}
         onConfirm={performDelete}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      <ConfirmModal 
+        isOpen={duplicateConfirm.isOpen}
+        title="Cliente Duplicato Trovato"
+        message={duplicateConfirm.message}
+        confirmText="Sì, usa esistente"
+        cancelText="No, forzane la creazione/modifica"
+        isDanger={false}
+        onConfirm={() => {
+          if (duplicateConfirm.existingClient) {
+             setSelectedClient(duplicateConfirm.existingClient);
+             setStep('details');
+             toast.success(`Dati di ${duplicateConfirm.existingClient.first_name} caricati! Puoi procedere con i servizi.`);
+          }
+          setDuplicateConfirm({ isOpen: false, message: '', existingClient: null, pendingFormData: null });
+        }}
+        onCancel={() => {
+          const pendingData = duplicateConfirm.pendingFormData;
+          setDuplicateConfirm({ isOpen: false, message: '', existingClient: null, pendingFormData: null });
+          if (pendingData) {
+             // Force the submit bypassing the duplicate check
+             onNewClientSubmit(pendingData, true);
+          }
+        }}
       />
     </div>
   );

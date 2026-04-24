@@ -7,6 +7,7 @@ export interface Client {
   email?: string | null;
   unique_code?: string;
   birth_date?: string | null;
+  birth_month?: number | null;
   is_active?: boolean;
   is_vip?: boolean;
   total_visits?: number;
@@ -85,6 +86,19 @@ export interface Treatment {
 export type NewClient = Omit<Client, 'id' | 'created_at'>;
 export type NewAppointment = Omit<Appointment, 'id' | 'created_at' | 'clients'>;
 
+export interface UserFeedback {
+  id: string;
+  created_at: string;
+  user_id: string;
+  type: 'bug' | 'idea' | 'other' | string;
+  title: string;
+  description: string;
+}
+
+/**
+ * @deprecated Il modulo SaaS Stripe è stato rimosso in favore della Beta Gratuita limitata. 
+ * Questa interfaccia è tenuta solo per retro-compatibilità dei vecchi trigger.
+ */
 export interface Subscription {
   id: string;
   user_id: string;

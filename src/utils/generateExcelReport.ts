@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { format } from 'date-fns';
+import { parseBusinessDate } from '../lib/date';
 
 export const generateExcelReport = async (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -115,7 +116,7 @@ export const generateExcelReport = async (
 
   // Dati
   reportData.forEach((a) => {
-    const dDate = new Date(a.date);
+    const dDate = parseBusinessDate(a.date);
     const row = sheet.addRow([
       '',
       format(dDate, 'dd/MM/yyyy'),
