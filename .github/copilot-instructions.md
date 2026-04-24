@@ -166,13 +166,13 @@ Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile c
 | `id` | `string` | No | UUID PK |
 | `created_at` | `string` | No | Iso Timestamp |
 | `user_id` | `string` | No | FK → auth.users. RLS policy: insert e view solo il proprio. |
-| `type` | `string` | No | 'bug', 'idea', 'other' |
+| `type` | `string` | No | 'bug' \| 'idea' \| 'other' |
 | `title` | `string` | No | Titolo breve |
 | `description` | `string` | No | Testo completo del feedback |
 
 ### `subscriptions` *(Deprecata)*
 
-La tabella esiste ancora a causa dei vecchi trigger di registrazione, ma i dati al suo interno non vengono più utilizzati per bloccare l'applicazione in quanto l'applicazione è entrata in fase Beta Gratuita limitless. Nessun blocco basato su Stripe o tier plan è in funzione.
+La tabella esiste ancora a causa dei vecchi trigger di registrazione, ma i dati al suo interno non vengono più utilizzati. L'interfaccia TS è marcata `@deprecated`. Nessun blocco basato su Stripe o tier plan è in funzione.
 
 ### Tipi Ausiliari
 
@@ -687,14 +687,15 @@ Modale per l'invio di feedback da parte degli utenti della Beta. Accessibile dal
 
 - **Routing**: Si può utilizzare sia `BrowserRouter` per build web standard che HashRouter. Attualmente configurato come PWA-friendly.
 - **Styling**: Tailwind CSS v4, solo classi utility. Helper `cn()` in `src/lib/utils.ts`. Evitare file `.css` salvo `src/index.css` e `src/App.css`.
-- **Date**: `date-fns` con locale `it` in tutti i `format()`, `parse()` e nel localizer del calendario. Mai `moment.js`.
+- **Date & Prevenzione "Date Drift"**: `date-fns` con locale `it` per tutti i `format()` e `parse()`. Mai `moment.js`. **Anti-Date Drift**: EVITARE ASSOLUTAMENTE costrutti come `new Date('2026-04-24T10:00')` per il parsing (causa glitch UTC vs Local time). Usa sempre: `parse('2026-04-24 10:00', 'yyyy-MM-dd HH:mm', new Date())`.
 - **Form**: `react-hook-form` + `zod` con `zodResolver`. Non usare stato controllato manuale per i form.
 - **Toast**: `react-hot-toast`. Il `<Toaster />` è montato una sola volta in `MainLayout`. Non aggiungere istanze aggiuntive.
 - **Icone**: `lucide-react` esclusivamente.
 - **RLS**: ogni `insert` Supabase deve includere `user_id: user.id`.
-- **TypeScript**: strict mode. Nessun `any` implicito.
+- **TypeScript**: strict mode. Nessun `any` implicito. Types definiti in `src/types/index.ts`.
 - **Dialoghi distruttivi**: sempre `ConfirmModal`, mai `window.confirm()`.
 - **Lingua**: italiano per tutti i testi UI, commenti e messaggi di commit.
+- **Agenti AI Custom**: Usa `@Reviewer` per il code review e il prompt `@workspace /Aggiorna_istruzioni` per auto-documentare i cambiamenti su questo file.
 
 ---
 
@@ -771,4 +772,6 @@ npx supabase functions deploy telegram-webhook
 | `supabase/migrations/` | Migrazioni schema DB |
 | `landing-page/public/sitemap.xml` | Sitemap per Google Search Console (`rootfix.app`) |
 | `landing-page/public/robots.txt` | Robots.txt per crawler (`rootfix.app`) |
+| `.github/agents/Reviewer.agent.md` | Custum Agent Copilot (Checklist PR / RLS DB / UI best practice) |
+| `.github/prompts/Aggiorna_istruzioni.prompt.md` | Prompt Copilot per agg. documentazione post commit |
 | `.github/copilot-instructions.md` | Questo file — aggiornare dopo ogni modifica significativa |
