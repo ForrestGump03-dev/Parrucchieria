@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, type BaseSyntheticEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -257,7 +257,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
     }
   };
 
-  const onSubmit = async (data: FormData) => {
+  const onSubmit = async (data: FormData, eventOrBypass?: BaseSyntheticEvent | boolean) => {
+    const bypassDuplicateCheck = eventOrBypass === true;
     if (selectedServices.length === 0) {
       toast.error('Seleziona almeno un trattamento');
       return;
@@ -268,7 +269,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
 
       if (!clientId) {
          // 1. Strict Phone Check
-         if (data.phone && data.phone.length > 5) {
+         if (!bypassDuplicateCheck && data.phone && data.phone.length > 5) {
              const existing = await getClientByPhone(data.phone);
              if (existing) {
                  setDuplicateConfirm({
@@ -282,8 +283,9 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
              }
          } else {
              // 2. Soft Name Check
-             const possibleDupes = await findPotentialDuplicates(data.first_name, data.last_name);
-             if (possibleDupes.length > 0) {
+             if (!bypassDuplicateCheck) {
+                 const possibleDupes = await findPotentialDuplicates(data.first_name, data.last_name);
+                 if (possibleDupes.length > 0) {
                 const match = possibleDupes[0];
                 setDuplicateConfirm({
                   isOpen: true,
@@ -293,6 +295,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                 });
                 setSubmitting(false);
                 return;
+             }
              }
          }
          
@@ -314,6 +317,58 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
          if (error) throw error;
          clientId = newClient.id;
          onClientUpdated();
+      } else {
+         // Controlla se il nuovo numero di telefono o nome appartiene già a UN ALTRO cliente
+         if (!bypassDuplicateCheck && data.phone && data.phone !== selectedClient?.phone && data.phone.length > 5) {
+              const existing = await getClientByPhone(data.phone);
+              if (existing && existing.id !== clientId) {
+                 setDuplicateConfirm({
+                   isOpen: true,
+                   message: `Attenzione: Il numero ${data.phone} appartiene già a "${existing.first_name} ${existing.last_name}". Vuoi usare quel cliente per questo appuntamento invece di modificare quello attuale?`,
+                   existingClient: existing,
+                   pendingFormData: data
+                 });
+                 setSubmitting(false);
+                 return;
+             }
+         }
+
+         if (!bypassDuplicateCheck && (data.first_name !== selectedClient?.first_name || data.last_name !== selectedClient?.last_name)) {
+             const possibleDupes = await findPotentialDuplicates(data.first_name, data.last_name);
+             const otherDupes = possibleDupes.filter((d: Client) => d.id !== clientId);
+             if (otherDupes.length > 0) {
+                 const match = otherDupes[0];
+                 setDuplicateConfirm({
+                   isOpen: true,
+                   message: `Attenzione: Stai modificando il nome in "${match.first_name} ${match.last_name}", ma esiste già un altro cliente con questo nome! Vuoi usare il cliente già esistente invece di rinominare questo?`,
+                   existingClient: match,
+                   pendingFormData: data
+                 });
+                 setSubmitting(false);
+                 return;
+             }
+         }
+
+         // Se c'è un cliente selezionato ma l'utente ne ha modificato i campi ricaricabili, aggiorniamoli in automatico!
+         if (
+           data.first_name !== selectedClient?.first_name ||
+           data.last_name !== selectedClient?.last_name ||
+           (data.phone || '') !== (selectedClient?.phone || '') ||
+           (data.email || '') !== (selectedClient?.email || '') ||
+           (data.birth_date || '') !== (selectedClient?.birth_date || '')
+         ) {
+             const { error: updateError } = await supabase.from('clients').update({
+                  first_name: data.first_name,
+                  last_name: data.last_name,
+                  phone: data.phone || '',
+                  email: data.email || null,
+                  birth_date: data.birth_date || null
+             }).eq('id', clientId);
+             
+             if (!updateError && typeof onClientUpdated === 'function') {
+                  onClientUpdated();
+             }
+         }
       }
       
       // Prepare products payload
@@ -570,9 +625,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                   <input
                     {...register('first_name', { required: true })}
-                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white read-only:bg-slate-50 read-only:text-slate-500"
+                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
                     placeholder="Nome"
-                    readOnly={Boolean(selectedClient && !isEditingClient)}
                   />
                 </div>
               </div>
@@ -580,9 +634,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                 <label className="block text-sm font-medium text-slate-700 mb-1">Cognome</label>
                 <input
                   {...register('last_name', { required: true })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white read-only:bg-slate-50 read-only:text-slate-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
                   placeholder="Cognome"
-                  readOnly={Boolean(selectedClient && !isEditingClient)}
                 />
               </div>
             </div>
@@ -604,9 +657,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                          setValue('phone', clean); 
                       }
                     })}
-                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
+                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
                     placeholder="Se disponibile..."
-                    readOnly={Boolean(selectedClient && !isEditingClient)}
                   />
                 </div>
               </div>
@@ -618,9 +670,8 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                   <input
                     type="email"
                     {...register('email')}
-                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500"
+                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
                     placeholder="mario@example.com"
-                    readOnly={Boolean(selectedClient && !isEditingClient)}
                   />
                 </div>
               </div>
@@ -632,8 +683,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                   <input
                     type="date"
                     {...register('birth_date')}
-                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm read-only:bg-slate-50 read-only:text-slate-500 text-slate-700"
-                    readOnly={Boolean(selectedClient && !isEditingClient)}
+                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm text-slate-700"
                   />
                 </div>
               </div>
@@ -1030,7 +1080,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
         title="Cliente Duplicato Trovato"
         message={duplicateConfirm.message}
         confirmText="Sì, usa esistente"
-        cancelText="No, crea nuovo"
+        cancelText="No, forzane la creazione/modifica"
         isDanger={false}
         onConfirm={() => {
           if (duplicateConfirm.existingClient && onSelectExistingClient) {
@@ -1040,7 +1090,12 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
           setDuplicateConfirm({ isOpen: false, message: '', existingClient: null, pendingFormData: null });
         }}
         onCancel={() => {
+          const pendingData = duplicateConfirm.pendingFormData;
           setDuplicateConfirm({ isOpen: false, message: '', existingClient: null, pendingFormData: null });
+          if (pendingData) {
+             // Force the submit bypassing the duplicate check
+             onSubmit(pendingData, true);
+          }
         }}
       />
     </div>
