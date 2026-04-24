@@ -67,11 +67,6 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
             <X size={20} />
           </button>
         </div>
-<<<<<<< Updated upstream
-        
-=======
-
->>>>>>> Stashed changes
         <div className="p-4 flex flex-col items-center">
            {error ? (
              <div className="text-red-600 text-sm text-center font-medium bg-red-50 p-3 rounded-lg border border-red-100">
