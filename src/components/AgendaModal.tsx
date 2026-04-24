@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type BaseSyntheticEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { X, Save, Clock, UserPlus, ArrowLeft, Trash2, Settings, Star, Package, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -11,6 +11,7 @@ import { useStaff } from '../hooks/useStaff';
 import TreatmentManagerModal from './TreatmentManagerModal';
 import StaffManagerModal from './StaffManagerModal';
 import ConfirmModal from './ConfirmModal';
+import { formatBusinessDate, getTodayBusinessDate, parseBusinessDate } from '../lib/date';
 import { addMinutes, format } from 'date-fns';
 
 interface AgendaModalProps {
@@ -236,7 +237,8 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
 
     setSubmitting(true);
     try {
-      const dateStr = (appointmentToEdit ? appointmentToEdit.date : initialDate?.toISOString().split('T')[0]) || new Date().toISOString().split('T')[0];
+      const dateStr = appointmentToEdit?.date
+        ?? (initialDate ? formatBusinessDate(initialDate) : getTodayBusinessDate());
       
       // Sequential time logic initialization
       let currentStartTime = data.start_time;
@@ -327,7 +329,7 @@ export default function AgendaModal({ isOpen, onClose, initialDate, initialStaff
       
       let msg = '';
       if (type === 'reminder') {
-          const formattedDate = appointmentToEdit?.date ? format(new Date(appointmentToEdit.date), 'dd/MM/yyyy') : 'presto';
+          const formattedDate = appointmentToEdit?.date ? format(parseBusinessDate(appointmentToEdit.date), 'dd/MM/yyyy') : 'presto';
           const time = appointmentToEdit?.start_time ? ` alle ${appointmentToEdit.start_time}` : '';
           msg = `Ciao ${selectedClient.first_name}, ti ricordiamo il tuo appuntamento nel nostro salone il ${formattedDate}${time}. Per qualsiasi informazione, non esitare a contattarci! A presto.`;
       } else if (type === 'review') {

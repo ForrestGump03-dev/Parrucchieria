@@ -9,6 +9,7 @@ import { useClients } from '../hooks/useClients';
 import { useAppointments } from '../hooks/useAppointments';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { parseBusinessDate } from '../lib/date';
 import { useTreatments } from '../hooks/useTreatments';
 import { useProducts } from '../hooks/useProducts';
 import TreatmentManagerModal from './TreatmentManagerModal';
@@ -462,7 +463,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
         g.totalPrice += (itemPrice + productsTotal);
     });
 
-    return Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return Object.values(groups).sort((a, b) => b.date.localeCompare(a.date));
   }, [history]);
 
   const sendWhatsApp = (type: 'reminder' | 'review' | 'promo') => {
@@ -913,7 +914,7 @@ export default function AppointmentForm({ selectedClient, onClientUpdated, onSel
                                    </div>
                                    <div>
                                        <div className="flex items-center gap-2">
-                                           <span className="font-semibold text-slate-800 capitalize">{format(new Date(group.date), 'EEEE d MMMM yyyy', { locale: it })}</span>
+                                           <span className="font-semibold text-slate-800 capitalize">{format(parseBusinessDate(group.date), 'EEEE d MMMM yyyy', { locale: it })}</span>
                                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 font-medium">{group.items.length} {group.items.length === 1 ? 'Servizio' : 'Servizi'}</span>
                                        </div>
                                        <div className="text-sm text-slate-500 mt-0.5 flex items-center gap-2">
