@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStats, type DateRange } from '../hooks/useStats';
-import { TrendingUp, TrendingDown, DollarSign, CreditCard, Award, UserCheck, UserMinus, Filter, ArrowRight, Database, Download, Users, BarChart as BarChartIcon } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, CreditCard, Award, UserCheck, UserMinus, Filter, ArrowRight, Database, Download, Users, BarChart as BarChartIcon, Eye, EyeOff, Lock } from 'lucide-react';
 import ClientDetailView from '../components/ClientDetailView';
+import ReportPinModal from '../components/ReportPinModal';
+import ReportPinSetupModal from '../components/ReportPinSetupModal';
+import { useReportSecurity } from '../hooks/useReportSecurity';
 import toast from 'react-hot-toast';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, parse, startOfDay, endOfDay, isValid } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { formatBusinessDate, getTodayBusinessDate, parseBusinessDate } from '../lib/date';
-import { createCsvString } from '../lib/utils';
+import { createCsvString, cn } from '../lib/utils';
 import { generateExcelReport } from '../utils/generateExcelReport';
 import JSZip from 'jszip';
 import {
@@ -26,6 +29,61 @@ import {
 export default function Reports() {
   const { user } = useAuth();
   const { stats, loading, fetchStats } = useStats();
+  const { hasPin, pinSkipped } = useReportSecurity();
+
+  // Stato visibilità fatturato protetto
+  const [isRevealed, setIsRevealed] = useState(false);
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
+  const [pendingUnlockAction, setPendingUnlockAction] = useState<(() => void) | null>(null);
+
+  const handleToggleEye = () => {
+    if (isRevealed) {
+      setIsRevealed(false);
+      return;
+    }
+
+    if (hasPin) {
+      setIsPinModalOpen(true);
+    } else if (!pinSkipped) {
+      setIsSetupModalOpen(true);
+    } else {
+      setIsRevealed(true);
+      const reminderKey = 'root_report_pin_reminder_shown';
+      if (!sessionStorage.getItem(reminderKey)) {
+        sessionStorage.setItem(reminderKey, 'true');
+        toast("Dati visibili (nessun PIN configurato). Puoi aggiungerne uno in Impostazioni > Sicurezza.", {
+          icon: '👁️',
+        });
+      }
+    }
+  };
+
+  const handleRequireUnlock = (action: () => void) => {
+    if (isRevealed) {
+      action();
+      return;
+    }
+
+    if (hasPin) {
+      setPendingUnlockAction(() => action);
+      setIsPinModalOpen(true);
+    } else if (!pinSkipped) {
+      setPendingUnlockAction(() => action);
+      setIsSetupModalOpen(true);
+    } else {
+      setIsRevealed(true);
+      action();
+    }
+  };
+
+  const handlePinSuccess = () => {
+    setIsRevealed(true);
+    if (pendingUnlockAction) {
+      pendingUnlockAction();
+      setPendingUnlockAction(null);
+    }
+  };
 
   const seedPenetrationTest = async () => {
     if (!user) return toast.error("Devi essere loggato");
@@ -230,14 +288,22 @@ export default function Reports() {
   }
 
   if (showDetailView) {
-    return <ClientDetailView range={selectedRange} onClose={() => setShowDetailView(false)} />;
+    return (
+      <ClientDetailView
+        range={selectedRange}
+        onClose={() => setShowDetailView(false)}
+        isRevealed={isRevealed}
+        onToggleReveal={handleToggleEye}
+        onRequestUnlock={handleRequireUnlock}
+      />
+    );
   }
 
   return (
     <div className="space-y-8 pb-10">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-4 flex-wrap">
+          <div className="flex items-start gap-3 flex-wrap">
             <div>
                <h1 className="text-2xl font-bold text-slate-800">Analisi Finanziaria</h1>
                <p className="text-slate-500 text-sm">Monitora le performance del tuo salone</p>
@@ -257,6 +323,20 @@ export default function Reports() {
               <Database size={15} />
               Registro Dettagliato
               <ArrowRight size={14} className="text-indigo-400" />
+            </button>
+
+            <button
+              onClick={handleToggleEye}
+              className={cn(
+                "flex items-center gap-2 border px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm mt-0.5",
+                isRevealed
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+              )}
+              title={isRevealed ? "Nascondi fatturato (sfoca)" : "Mostra fatturato (richiede PIN)"}
+            >
+              {isRevealed ? <EyeOff size={16} className="text-emerald-600" /> : <Eye size={16} className="text-slate-500" />}
+              <span>{isRevealed ? "Nascondi Fatturato" : "Mostra Fatturato"}</span>
             </button>
           </div>
           
@@ -324,9 +404,11 @@ export default function Reports() {
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
             <div>
                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Incasso Totale Periodo</p>
-               <h3 className="text-2xl font-bold text-slate-800 mt-1">€ {stats?.periodRevenue.toFixed(2)}</h3>
+               <h3 className={cn("text-2xl font-bold text-slate-800 mt-1 transition-all duration-300", !isRevealed && "blur-md select-none")}>
+                 € {stats?.periodRevenue.toFixed(2)}
+               </h3>
                {stats && (
-                 <div className="mt-1 space-y-0.5">
+                 <div className={cn("mt-1 space-y-0.5 transition-all duration-300", !isRevealed && "blur-md select-none")}>
                    <div className={`flex items-center gap-1 text-xs font-medium ${stats.growth >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                      {stats.growth >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                      <span>{Math.abs(stats.growth) > 999 ? '> 999%' : `${Math.abs(stats.growth).toFixed(1)}%`} vs prec.</span>
@@ -355,14 +437,14 @@ export default function Reports() {
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
             <div>
                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Scontrino Medio</p>
-               <h3 className="text-2xl font-bold text-slate-800 mt-1">€ {stats?.averageTicket.toFixed(2)}</h3>
+               <h3 className={cn("text-2xl font-bold text-slate-800 mt-1 transition-all duration-300", !isRevealed && "blur-md select-none")}>
+                 € {stats?.averageTicket.toFixed(2)}
+               </h3>
             </div>
             <div className="p-3 bg-emerald-50 rounded-full text-emerald-600">
                <CreditCard size={20} />
             </div>
         </div>
-
-        
       </div>
 
       {/* CHARTS SECTION */}
@@ -373,8 +455,8 @@ export default function Reports() {
                   <BarChartIcon className="text-indigo-500" size={20} />
                   Andamento Giornaliero
               </h3>
-              <div className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-[300px] w-full min-w-0 relative">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} className={cn("transition-all duration-300", !isRevealed && "blur-md select-none pointer-events-none")}>
                     <LineChart data={stats?.dailyTrend || []}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                         <XAxis 
@@ -406,6 +488,13 @@ export default function Reports() {
                         />
                     </LineChart>
                 </ResponsiveContainer>
+                {!isRevealed && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                    <span className="bg-slate-900/80 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-md backdrop-blur-sm">
+                      <Lock size={13} /> Dati andamento protetti
+                    </span>
+                  </div>
+                )}
               </div>
           </div>
 
@@ -415,17 +504,17 @@ export default function Reports() {
                   <Award className="text-amber-500" size={20} />
                   Top Staff
               </h3>
-              <div className="h-[300px] w-full">
-                 <ResponsiveContainer width="100%" height="100%">
+              <div className="h-[300px] w-full min-w-0 relative">
+                 <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} className={cn("transition-all duration-300", !isRevealed && "blur-md select-none pointer-events-none")}>
                     <BarChart layout="vertical" data={stats?.staffStats?.slice(0,5) || []} margin={{ left: 0, right: 30 }}>
                         <XAxis type="number" hide />
                         <YAxis 
-                           dataKey="name" 
-                           type="category" 
-                           axisLine={false} 
-                           tickLine={false}
-                           width={80}
-                           tick={{fontSize: 12, fill: '#64748B'}} 
+                            dataKey="name" 
+                            type="category" 
+                            axisLine={false} 
+                            tickLine={false} 
+                            width={80}
+                            tick={{fontSize: 12, fill: '#64748B'}} 
                         />
                         <Tooltip 
                             cursor={{fill: '#F1F5F9'}} 
@@ -440,6 +529,13 @@ export default function Reports() {
                         </Bar>
                     </BarChart>
                  </ResponsiveContainer>
+                 {!isRevealed && (
+                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                     <span className="bg-slate-900/80 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-md backdrop-blur-sm">
+                       <Lock size={13} /> Classifica protetta
+                     </span>
+                   </div>
+                 )}
               </div>
           </div>
       </div>
@@ -469,7 +565,9 @@ export default function Reports() {
                        
                        <div className="flex justify-between text-xs">
                           <span className="text-indigo-600 font-medium">{t.penetration.toFixed(1)}% delle visite</span>
-                          <span className="text-slate-500 font-medium">Tot € {t.totalRevenue.toFixed(0)}</span>
+                          <span className={cn("text-slate-500 font-medium transition-all duration-300", !isRevealed && "blur-sm select-none")}>
+                            Tot € {t.totalRevenue.toFixed(0)}
+                          </span>
                        </div>
                     </div>
                   ))}
@@ -500,8 +598,10 @@ export default function Reports() {
                           </div>
                        </div>
                        <div className="text-right">
-                          <div className="font-bold text-slate-800 text-sm">€ {p.revenue.toFixed(2)}</div>
-                          <div className="text-xs text-slate-400">Ricavo Tot.</div>
+                          <div className={cn("font-bold text-slate-800 text-sm transition-all duration-300", !isRevealed && "blur-sm select-none")}>
+                            € {p.revenue.toFixed(2)}
+                          </div>
+                          <div className={cn("text-xs text-slate-400 transition-all duration-300", !isRevealed && "blur-sm select-none")}>Ricavo Tot.</div>
                        </div>
                     </div>
                   ))}
@@ -539,8 +639,8 @@ export default function Reports() {
                </div>
                
                <div className="space-y-3">
-                  {(clientViewMode === 'faith' ? stats?.topClients : stats?.sleepingClients)?.slice(0, 5).map((c, i) => (
-                    <div key={c.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors border border-slate-100">
+                   {(clientViewMode === 'faith' ? stats?.topClients : stats?.sleepingClients)?.slice(0, 5).map((c, i) => (
+                     <div key={c.id && c.id !== 'n/a' ? `${clientViewMode}-${c.id}` : `${clientViewMode}-${c.name}-${i}`} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors border border-slate-100">
                        <div className="flex items-center gap-3">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow-sm
                              ${i === 0 ? 'bg-amber-100 text-amber-600' : 'bg-white text-slate-500 border border-slate-200'}
@@ -561,7 +661,7 @@ export default function Reports() {
                                 : `${c.visits} Visite`
                              }
                           </div>
-                          <div className="text-xs text-slate-500">
+                          <div className={cn("text-xs text-slate-500 transition-all duration-300", !isRevealed && clientViewMode === 'faith' && "blur-sm select-none")}>
                              {clientViewMode === 'sleep' 
                                  ? format(parseBusinessDate(c.lastVisit), 'dd/MM/yyyy')
                                 : `€ ${c.spent.toFixed(2)}`
@@ -578,18 +678,59 @@ export default function Reports() {
       </div>
       
       {/* EXPORT SECTION */}
-      <BackupSection range={selectedRange} />
+      <BackupSection range={selectedRange} isRevealed={isRevealed} onRequestUnlock={handleRequireUnlock} />
+
+      {/* MODALI DI SICUREZZA PIN */}
+      <ReportPinModal
+        isOpen={isPinModalOpen}
+        onClose={() => {
+          setIsPinModalOpen(false);
+          setPendingUnlockAction(null);
+        }}
+        onSuccess={handlePinSuccess}
+      />
+
+      <ReportPinSetupModal
+        isOpen={isSetupModalOpen}
+        onClose={() => {
+          setIsSetupModalOpen(false);
+          setPendingUnlockAction(null);
+        }}
+        onSuccess={handlePinSuccess}
+      />
     </div>
   );
 }
 
 interface BackupSectionProps {
   range: DateRange;
+  isRevealed: boolean;
+  onRequestUnlock: (action: () => void) => void;
 }
 
-function BackupSection({ range }: BackupSectionProps) {
+function BackupSection({ range, isRevealed, onRequestUnlock }: BackupSectionProps) {
     const [loadingReport, setLoadingReport] = useState(false);
     const [loadingZip, setLoadingZip] = useState(false);
+
+    const handleDownloadReport = () => {
+        if (!isRevealed) {
+            onRequestUnlock(() => {
+                performReportDownload();
+            });
+        } else {
+            performReportDownload();
+        }
+    };
+
+    const handleBackup = () => {
+        if (!isRevealed) {
+            onRequestUnlock(() => {
+                performBackup();
+            });
+        } else {
+            performBackup();
+        }
+    };
 
     const performReportDownload = async () => {
         setLoadingReport(true);
@@ -732,7 +873,7 @@ function BackupSection({ range }: BackupSectionProps) {
                         </p>
                     </div>
                     <button 
-                      onClick={performReportDownload}
+                      onClick={handleDownloadReport}
                       disabled={loadingReport}
                       className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-all disabled:opacity-70"
                     >
@@ -753,7 +894,7 @@ function BackupSection({ range }: BackupSectionProps) {
                         </p>
                     </div>
                     <button 
-                      onClick={performBackup}
+                      onClick={handleBackup}
                       disabled={loadingZip}
                       className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded-lg shadow-sm transition-all disabled:opacity-70"
                     >

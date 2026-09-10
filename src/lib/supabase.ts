@@ -11,4 +11,12 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error(msg);
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    // Risolve il blocco di navigazione e l'errore NavigatorLockAcquireTimeoutError
+    // evitando conflitti con l'API navigator.locks del browser
+    lock: async (_name, _acquireTimeout, fn) => {
+      return await fn();
+    },
+  },
+});

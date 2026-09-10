@@ -251,9 +251,9 @@ export function useStats() {
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 5);
         
-      const topClients = Array.from(clientPeriodMap.values())
-        .map(c => ({
-            id: 'n/a', // Not critical here
+      const topClients = Array.from(clientPeriodMap.entries())
+        .map(([id, c]) => ({
+            id: id || c.name,
             name: c.name,
             visits: c.visits.size,
             spent: c.spent,
@@ -264,11 +264,11 @@ export function useStats() {
 
       // Sleeping Clients (Didn't visit in last 60 days but have visited before)
       const sixtyDaysAgo = subDays(today, 60);
-      const sleepingClients = Array.from(allClientsMap.values())
+      const sleepingClients = Array.from(allClientsMap.entries())
+        .map(([id, c]) => ({ ...c, id: id || c.name }))
         .filter(c => parse(c.lastVisit, 'yyyy-MM-dd', new Date()) < sixtyDaysAgo)
         .sort((a, b) => b.spent - a.spent) // High value lost clients first
-        .slice(0, 50)
-        .map(c => ({ ...c, id: 'n/a' }));
+        .slice(0, 50);
 
       const staffStats = Array.from(staffMap.values())
         .map(s => ({

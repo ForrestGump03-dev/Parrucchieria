@@ -14,11 +14,24 @@ export default function MainLayout() {
   const location = useLocation();
   const { signOut, user } = useAuth();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'security' | 'notifications'>('security');
+  const [settingsTab, setSettingsTab] = useState<'security' | 'notifications' | 'qrcode'>('security');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const { unreadCount } = useNotifications();
+
+  // Listen for custom open-settings-modal event (e.g. from forgot PIN in reports)
+  useEffect(() => {
+    const handleOpenSettings = (e: Event) => {
+      const customEvent = e as CustomEvent<{ tab?: 'security' | 'notifications' | 'qrcode' }>;
+      if (customEvent.detail?.tab) {
+        setSettingsTab(customEvent.detail.tab);
+      }
+      setIsSettingsOpen(true);
+    };
+    window.addEventListener('open-settings-modal', handleOpenSettings);
+    return () => window.removeEventListener('open-settings-modal', handleOpenSettings);
+  }, []);
 
   // Listen for Password Recovery event to force open the change password modal
   useEffect(() => {

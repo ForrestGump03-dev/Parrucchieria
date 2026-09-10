@@ -15,6 +15,8 @@ import {
   Star,
   Filter,
   Calendar,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   useDetailedReport,
@@ -81,10 +83,12 @@ function RankBadge({ rank }: { rank: number }) {
 function ClientRow({
   client,
   isExpanded,
+  isRevealed = true,
   onToggle,
 }: {
   client: RankedClient;
   isExpanded: boolean;
+  isRevealed?: boolean;
   onToggle: () => void;
 }) {
   const avatarColor = getAvatarColor(client.clientName);
@@ -118,7 +122,7 @@ function ClientRow({
               <div className="mt-1 w-20 bg-slate-100 rounded-full h-1">
                 <div
                   className="bg-indigo-400 h-1 rounded-full transition-all duration-500"
-                  style={{ width: `${spendPct}%` }}
+                  style={{ width: isRevealed ? `${spendPct}%` : '0%' }}
                 />
               </div>
             </div>
@@ -158,15 +162,19 @@ function ClientRow({
 
         {/* Prodotti */}
         <td className="px-3 py-3 text-right">
-          <span className={cn('text-sm font-medium', client.productsRevenue > 0 ? 'text-emerald-700' : 'text-slate-300')}>
+          <span className={cn('text-sm font-medium transition-all duration-300', !isRevealed && 'blur-sm select-none', client.productsRevenue > 0 ? 'text-emerald-700' : 'text-slate-300')}>
             {client.productsRevenue > 0 ? `€ ${client.productsRevenue.toFixed(2)}` : '—'}
           </span>
         </td>
 
         {/* Totale + scontrino medio */}
         <td className="px-3 py-3 text-right">
-          <div className="text-sm font-bold text-slate-800">€ {client.totalSpent.toFixed(2)}</div>
-          <div className="text-[10px] text-slate-400">media € {client.avgPerVisit.toFixed(0)}</div>
+          <div className={cn("text-sm font-bold text-slate-800 transition-all duration-300", !isRevealed && "blur-sm select-none")}>
+            € {client.totalSpent.toFixed(2)}
+          </div>
+          <div className={cn("text-[10px] text-slate-400 transition-all duration-300", !isRevealed && "blur-sm select-none")}>
+            media € {client.avgPerVisit.toFixed(0)}
+          </div>
         </td>
 
         {/* Ultima visita + staff */}
@@ -212,7 +220,7 @@ function ClientRow({
                 </thead>
                 <tbody>
                   {client.appointments.map(apt => (
-                    <AptSubRow key={apt.id} apt={apt} />
+                    <AptSubRow key={apt.id} apt={apt} isRevealed={isRevealed} />
                   ))}
                 </tbody>
                 <tfoot>
@@ -220,13 +228,13 @@ function ClientRow({
                     <td colSpan={6} className="pt-2 text-slate-500">
                       {client.visits} visita{client.visits !== 1 ? 'e' : ''} nel periodo
                     </td>
-                    <td className="pt-2 text-right pl-4 text-slate-700">
+                    <td className={cn("pt-2 text-right pl-4 text-slate-700 transition-all duration-300", !isRevealed && "blur-sm select-none")}>
                       € {client.servicesRevenue.toFixed(2)}
                     </td>
-                    <td className="pt-2 text-right pl-4 text-emerald-700">
+                    <td className={cn("pt-2 text-right pl-4 text-emerald-700 transition-all duration-300", !isRevealed && "blur-sm select-none")}>
                       {client.productsRevenue > 0 ? `€ ${client.productsRevenue.toFixed(2)}` : '—'}
                     </td>
-                    <td className="pt-2 text-right pl-4 text-indigo-700 font-bold">
+                    <td className={cn("pt-2 text-right pl-4 text-indigo-700 font-bold transition-all duration-300", !isRevealed && "blur-sm select-none")}>
                       € {client.totalSpent.toFixed(2)}
                     </td>
                   </tr>
@@ -240,7 +248,7 @@ function ClientRow({
   );
 }
 
-function AptSubRow({ apt }: { apt: ClientAppointmentDetail }) {
+function AptSubRow({ apt, isRevealed = true }: { apt: ClientAppointmentDetail; isRevealed?: boolean }) {
   return (
     <tr className="border-b border-slate-100/70 last:border-0 hover:bg-white/60 transition-colors">
       <td className="py-2 pr-4 font-medium text-slate-700 whitespace-nowrap">
@@ -272,17 +280,17 @@ function AptSubRow({ apt }: { apt: ClientAppointmentDetail }) {
       </td>
       <td className="py-2 pr-4 text-slate-500 whitespace-nowrap">{apt.staffName}</td>
       <td className="py-2 pr-4 text-slate-400 italic max-w-[100px] truncate">{apt.notes || '—'}</td>
-      <td className="py-2 pl-4 text-right text-slate-700 whitespace-nowrap">
+      <td className={cn("py-2 pl-4 text-right text-slate-700 whitespace-nowrap transition-all duration-300", !isRevealed && "blur-sm select-none")}>
         € {apt.servicePrice.toFixed(2)}
       </td>
-      <td className="py-2 pl-4 text-right whitespace-nowrap">
+      <td className={cn("py-2 pl-4 text-right whitespace-nowrap transition-all duration-300", !isRevealed && "blur-sm select-none")}>
         {apt.productsRevenue > 0 ? (
           <span className="text-emerald-700">€ {apt.productsRevenue.toFixed(2)}</span>
         ) : (
           <span className="text-slate-300">—</span>
         )}
       </td>
-      <td className="py-2 pl-4 text-right font-bold text-slate-800 whitespace-nowrap">
+      <td className={cn("py-2 pl-4 text-right font-bold text-slate-800 whitespace-nowrap transition-all duration-300", !isRevealed && "blur-sm select-none")}>
         € {apt.totalPrice.toFixed(2)}
       </td>
     </tr>
@@ -294,9 +302,18 @@ function AptSubRow({ apt }: { apt: ClientAppointmentDetail }) {
 interface Props {
   range: DateRange;
   onClose: () => void;
+  isRevealed?: boolean;
+  onToggleReveal?: () => void;
+  onRequestUnlock?: (callback: () => void) => void;
 }
 
-export default function ClientDetailView({ range: initialRange, onClose }: Props) {
+export default function ClientDetailView({
+  range: initialRange,
+  onClose,
+  isRevealed = true,
+  onToggleReveal,
+  onRequestUnlock,
+}: Props) {
   const { data, loading, fetchDetailedReport } = useDetailedReport();
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('spent');
@@ -441,13 +458,36 @@ export default function ClientDetailView({ range: initialRange, onClose }: Props
               <p className="text-slate-400 text-xs mt-0.5">Periodo: {rangeLabel}</p>
             </div>
           </div>
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex-shrink-0"
-          >
-            <Download size={15} />
-            Esporta CSV
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {onToggleReveal && (
+              <button
+                onClick={onToggleReveal}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm border",
+                  isRevealed
+                    ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                    : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                )}
+                title={isRevealed ? "Nascondi fatturato (sfoca)" : "Mostra fatturato (richiede PIN)"}
+              >
+                {isRevealed ? <EyeOff size={15} className="text-emerald-600" /> : <Eye size={15} className="text-slate-500" />}
+                <span>{isRevealed ? "Nascondi" : "Mostra"}</span>
+              </button>
+            )}
+            <button
+              onClick={() => {
+                if (onRequestUnlock && !isRevealed) {
+                  onRequestUnlock(handleExport);
+                } else {
+                  handleExport();
+                }
+              }}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
+            >
+              <Download size={15} />
+              Esporta CSV
+            </button>
+          </div>
         </div>
 
         {/* Selettore periodo */}
@@ -539,8 +579,10 @@ export default function ClientDetailView({ range: initialRange, onClose }: Props
           </div>
           <div>
             <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Incasso Totale</p>
-            <p className="text-xl font-bold text-slate-800">€ {(summary?.totalRevenue ?? 0).toFixed(2)}</p>
-            <p className="text-[10px] text-slate-400">
+            <p className={cn("text-xl font-bold text-slate-800 transition-all duration-300", !isRevealed && "blur-md select-none")}>
+              € {(summary?.totalRevenue ?? 0).toFixed(2)}
+            </p>
+            <p className={cn("text-[10px] text-slate-400 transition-all duration-300", !isRevealed && "blur-sm select-none")}>
               di cui € {(summary?.totalProductRevenue ?? 0).toFixed(2)} prodotti
             </p>
           </div>
@@ -552,7 +594,9 @@ export default function ClientDetailView({ range: initialRange, onClose }: Props
           </div>
           <div>
             <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Scontrino Medio</p>
-            <p className="text-2xl font-bold text-slate-800">€ {(summary?.avgTicket ?? 0).toFixed(2)}</p>
+            <p className={cn("text-2xl font-bold text-slate-800 transition-all duration-300", !isRevealed && "blur-md select-none")}>
+              € {(summary?.avgTicket ?? 0).toFixed(2)}
+            </p>
           </div>
         </div>
       </div>
@@ -639,6 +683,7 @@ export default function ClientDetailView({ range: initialRange, onClose }: Props
                     key={client.clientId}
                     client={client}
                     isExpanded={expandedIds.has(client.clientId)}
+                    isRevealed={isRevealed}
                     onToggle={() => toggleExpand(client.clientId)}
                   />
                 ))}
@@ -652,10 +697,10 @@ export default function ClientDetailView({ range: initialRange, onClose }: Props
                     {filtered.reduce((s, c) => s + c.visits, 0)}
                   </td>
                   <td className="px-3 py-3" />
-                  <td className="px-3 py-3 text-right text-sm font-bold text-emerald-700">
+                  <td className={cn("px-3 py-3 text-right text-sm font-bold text-emerald-700 transition-all duration-300", !isRevealed && "blur-sm select-none")}>
                     € {filtered.reduce((s, c) => s + c.productsRevenue, 0).toFixed(2)}
                   </td>
-                  <td className="px-3 py-3 text-right text-sm font-bold text-indigo-700">
+                  <td className={cn("px-3 py-3 text-right text-sm font-bold text-indigo-700 transition-all duration-300", !isRevealed && "blur-sm select-none")}>
                     € {filtered.reduce((s, c) => s + c.totalSpent, 0).toFixed(2)}
                   </td>
                   <td className="px-3 py-3" colSpan={2} />

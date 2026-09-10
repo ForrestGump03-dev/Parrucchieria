@@ -40,6 +40,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setUser(null);
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    try {
+      sessionStorage.removeItem('root_report_pin_reminder_shown');
+    } catch {
+      // Ignora errori se sessionStorage non è disponibile
+    }
     await supabase.auth.signOut();
   }, []);
 

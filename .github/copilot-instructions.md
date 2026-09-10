@@ -83,6 +83,12 @@ Usa **`BrowserRouter`** nativo per permettere URL puliti ed essere compatibile c
 - Join: `select('*, tabella_correlata(*)')` — es. `appointments` con `clients(*)` e `staff_members(*)`.
 - Decremento stock prodotti via Supabase RPC: `supabase.rpc('decrement_stock', { p_id, quantity })`.
 - **Limite 1000 righe Supabase**: Di default, le chiamate `.select()` di Supabase ritornano al massimo 1000 righe. Quando si devono scaricare tutti i record storici (es. in `useStats` o `useDetailedReport` per calcolare KPI o liste complete), è **OBBLIGATORIO** utilizzare un ciclo di paginazione con `.range(start, end)` unito al modifier `ascending: true/false`. Questo previene il troncamento dei dati più recenti. Il limite delle 1000 righe scala senza problemi in Multi-Tenant perché le query sono filtrate alla base tramite RLS per il singolo salone.
+- **Gestione Lock e Concorrenza Auth (Bypass Navigator Locks)**: Per evitare blocchi di navigazione e l'errore `NavigatorLockAcquireTimeoutError` comune in Firefox e in ambienti SPA desktop/tablet durante i refresh automatici dei token o i controlli di sessione, il client in `src/lib/supabase.ts` impiega un bypass del lock nativo: `auth: { lock: async (_n, _t, fn) => await fn() }`. Non utilizzare l'API `navigator.locks` non controllata per evitare il congelamento delle transizioni di route.
+- **Verifica Password Amministratore (Stateless Fetch)**: La verifica della password dell'amministratore (es. per impostare, modificare o rimuovere il PIN del report) deve avvenire tramite chiamata `fetch` diretta a `${supabaseUrl}/auth/v1/token?grant_type=password`. NON istanziare un secondo client `createClient` (provoca il warning `Multiple GoTrueClient instances`) e NON invocare `signInWithPassword` sul client principale (perché sovrascriverebbe i token di sessione e attiverebbe listener `onAuthStateChange`).
+- **Sistema di Protezione Fatturato Report (PIN & Session Storage)**:
+  - Cifre di fatturato, scontrino medio e grafici finanziari in `/reports` e `ClientDetailView` sono sfocati di default per privacy in salone.
+  - Sblocco temporaneo tramite PIN a 6 cifre con hash SHA-256 e salt univoco salvato nei metadati dell'utente (`user.user_metadata.report_pin_hash`).
+  - La notifica di promemoria (quando nessun PIN è configurato) è limitata a **1 sola volta per sessione** tramite `sessionStorage.getItem('root_report_pin_reminder_shown')`, ripulita automaticamente al logout in `AuthContext.tsx` o alla chiusura del browser/spegnimento del computer.
 
 ---
 
@@ -556,7 +562,7 @@ Drawer laterale (slide-in da destra). Usa `useNotifications()` per tutte le azio
 ### `SettingsModal` (`src/components/SettingsModal.tsx`)
 
 Modale unificato per le impostazioni utente. Accessibile dalla sidebar. Include quattro aree principali:
-- **Sicurezza (2FA)**: Gestisce l'abilitazione (enrollment) e disabilitazione (unenrollment, protetta da rientro password) dell'autenticazione a due fattori TOTP (AAL2). Include banner per recupero in caso di dispositivo smarrito.
+- **Sicurezza (2FA & PIN Report)**: Gestisce l'abilitazione (enrollment) e disabilitazione dell'autenticazione a due fattori TOTP (AAL2), e la configurazione, modifica o rimozione del **PIN di Sicurezza a 6 cifre per il fatturato Report** (protetta da password admin). Include banner per recupero 2FA.
 - **Notifiche**: Configurazione di `useReminders` (suoni, anticipo, backup reminder).
 - **Password**: Cambio password.
 - **QR Code & Link Pubblico**: Generazione e stampa del QR Code per la registrazione pubblica dei clienti (`/qr/:salonId`). Link diretto copiabile e visualizzazione QR inline. Spostato qui dalla rimossa pagina Marketing.
@@ -647,7 +653,8 @@ Modale per l'invio di feedback da parte degli utenti della Beta. Accessibile dal
 - **Hook**: `useStats`, `useAuth`
 - **Libreria grafici**: `recharts` (LineChart trend giornaliero, BarChart confronti)
 - **Feature**: filtro DateRange (Oggi/Settimana/Mese/Anno/custom), KPI cards con `growth` %, top trattamenti/clienti/staff, clienti dormienti, export CSV via `exportToCsv()` (solo dati utente corrente, RLS garantisce isolamento).
-- **Registro Dettagliato**: pulsante "Registro Dettagliato →" → imposta `showDetailView = true` → render immediato di `<ClientDetailView range={selectedRange} onClose={...} />` (sostituisce il render standard della pagina). Chiusura tramite `onClose` ripristina la vista Reports.
+- **Protezione Fatturato (PIN 6 Cifre)**: i dati economici (incassi, scontrino medio, ricavi prodotti, trend grafici e colonne Registro Dettagliato) sono sfocati all'avvio per privacy in salone. L'icona occhio permette di sbloccarli tramite PIN di sicurezza a 6 cifre. Include wizard di prima configurazione (con opzione 'Salta per ora'), link per recupero/cambio PIN protetto da password admin in Impostazioni, e protezione preventiva sulle esportazioni Excel/CSV.
+- **Registro Dettagliato**: pulsante "Registro Dettagliato →" → imposta `showDetailView = true` → render immediato di `<ClientDetailView range={selectedRange} onClose={...} />` (sostituisce il render standard della pagina). Chiusura tramite `onClose` ripristina la vista Reports. Condivide lo stato di sblocco PIN con la schermata Reports.
 
 ---
 
@@ -770,10 +777,11 @@ npx supabase functions deploy telegram-webhook
 | `src/hooks/useDetailedReport.ts` | Report dettagliato per cliente, `DetailedClientRow`, `DetailedReportData` |
 | `src/hooks/useReminders.ts` | Reminder appuntamenti + backup Smart Snooze 14gg |
 | `src/hooks/useWinback.ts` | Candidati winback — clienti con ultima visita > N giorni (default 60) |
+| `src/hooks/useReportSecurity.ts` | Gestione hash SHA-256 PIN a 6 cifre, skip flag e verifica password admin |
 | `src/pages/Agenda.tsx` | Calendario DnD con colonne staff, context menu, DnD |
 | `src/pages/Clients.tsx` | Sidebar clienti + form checkout |
 | `src/pages/Inventory.tsx` | Gestione magazzino prodotti |
-| `src/pages/Reports.tsx` | KPI, grafici recharts, export CSV |
+| `src/pages/Reports.tsx` | KPI, grafici recharts, export CSV, protezione PIN e sfocatura |
 | `src/components/AgendaModal.tsx` | Modale multi-step prenotazione (client→details→new-client) |
 | `src/components/AppointmentForm.tsx` | Form checkout + storico cliente raggruppato per data |
 | `src/components/ClientDetailView.tsx` | Vista full-screen registro dettagliato clienti, espandibile per appuntamento |
@@ -782,7 +790,9 @@ npx supabase functions deploy telegram-webhook
 | `src/components/BarcodeScanner.tsx` | Scansione tramite fotocamera (libreria `html5-qrcode`) |
 | `src/components/StaffManagerModal.tsx` | CRUD staff (max 7) |
 | `src/components/TreatmentManagerModal.tsx` | CRUD listino trattamenti |
-| `src/components/SettingsModal.tsx` | Modale unificato impostazioni (2FA, Notifiche, Password, QR Code) |
+| `src/components/SettingsModal.tsx` | Modale unificato impostazioni (2FA, PIN Report, Notifiche, Password, QR Code) |
+| `src/components/ReportPinModal.tsx` | Modale inserimento PIN a 6 cifre con link cambio/recupero PIN |
+| `src/components/ReportPinSetupModal.tsx` | Modale prima configurazione PIN con opzione Salta per ora |
 | `src/components/FeedbackModal.tsx` | Modale invio feedback categorizzato (bug/idea/altro) → notifica Telegram |
 | `src/components/NotificationDrawer.tsx` | Drawer centro notifiche |
 | `src/constants/treatments.ts` | Trattamenti predefiniti (seed DB) |

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { X, Lock, Save, Eye, EyeOff, Shield, Bell, Database, Users, AlertTriangle, Smartphone, Loader2, CheckCircle2, QrCode } from 'lucide-react';
+import { X, Lock, Save, Eye, EyeOff, Shield, Bell, Database, Users, AlertTriangle, Smartphone, Loader2, CheckCircle2, QrCode, KeyRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useReminders } from '../hooks/useReminders';
+import { useReportSecurity } from '../hooks/useReportSecurity';
 import QRCode from 'react-qr-code';
 
 interface SettingsModalProps {
@@ -36,6 +37,16 @@ export default function SettingsModal({ isOpen, onClose, initialTab = 'security'
   const [isSettingUp2FA, setIsSettingUp2FA] = useState(false);
   const [isDisabling2FA, setIsDisabling2FA] = useState(false);
   const [loading2FA, setLoading2FA] = useState(false);
+
+  // Report PIN state
+  const { hasPin, setPin, removePin } = useReportSecurity();
+  const [pinFormMode, setPinFormMode] = useState<'idle' | 'edit' | 'remove'>('idle');
+  const [pinPassword, setPinPassword] = useState('');
+  const [showPinPassword, setShowPinPassword] = useState(false);
+  const [newPinValue, setNewPinValue] = useState('');
+  const [confirmPinValue, setConfirmPinValue] = useState('');
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
 
   const password = watch('password');
 
@@ -159,6 +170,54 @@ export default function SettingsModal({ isOpen, onClose, initialTab = 'security'
        toast.error((err as any).message || 'Errore durante la disattivazione. Verifica la password.');
     } finally {
        setLoading2FA(false);
+    }
+  };
+
+  const handleSavePin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinError(null);
+    if (!pinPassword) {
+      setPinError('Inserisci la password admin attuale.');
+      return;
+    }
+    if (newPinValue.length !== 6 || !/^\d{6}$/.test(newPinValue)) {
+      setPinError('Il PIN deve essere composto da 6 cifre numeriche.');
+      return;
+    }
+    if (newPinValue !== confirmPinValue) {
+      setPinError('I due PIN inseriti non coincidono.');
+      return;
+    }
+    setPinLoading(true);
+    const res = await setPin(newPinValue, pinPassword);
+    setPinLoading(false);
+    if (res.success) {
+      toast.success(hasPin ? 'PIN modificato con successo!' : 'PIN impostato con successo!');
+      setPinFormMode('idle');
+      setPinPassword('');
+      setNewPinValue('');
+      setConfirmPinValue('');
+    } else {
+      setPinError(res.error || 'Errore durante il salvataggio.');
+    }
+  };
+
+  const handleRemovePin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinError(null);
+    if (!pinPassword) {
+      setPinError('Inserisci la password admin per rimuovere il PIN.');
+      return;
+    }
+    setPinLoading(true);
+    const res = await removePin(pinPassword);
+    setPinLoading(false);
+    if (res.success) {
+      toast.success('PIN rimosso con successo!');
+      setPinFormMode('idle');
+      setPinPassword('');
+    } else {
+      setPinError(res.error || 'Errore durante la rimozione.');
     }
   };
 
@@ -384,6 +443,271 @@ export default function SettingsModal({ isOpen, onClose, initialTab = 'security'
                   </div>
                 </div>
 
+              </section>
+
+              {/* Report PIN Section */}
+              <section className="border-t border-slate-100 pt-6">
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-1">
+                    <KeyRound size={20} className="text-indigo-600" /> PIN di Sicurezza Report (Fatturato)
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    Proteggi i dati del fatturato e le metriche finanziarie dai collaboratori con un PIN a 6 cifre.
+                  </p>
+                </div>
+
+                {hasPin ? (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 md:p-5 space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
+                          <CheckCircle2 size={20} />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-slate-800 text-sm">PIN di Sicurezza Attivo</h4>
+                          <p className="text-xs text-slate-500">Il fatturato nei report è protetto da PIN a 6 cifre.</p>
+                        </div>
+                      </div>
+                      {pinFormMode === 'idle' && (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPinFormMode('edit');
+                              setPinError(null);
+                              setPinPassword('');
+                              setNewPinValue('');
+                              setConfirmPinValue('');
+                            }}
+                            className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
+                          >
+                            Modifica PIN
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPinFormMode('remove');
+                              setPinError(null);
+                              setPinPassword('');
+                            }}
+                            className="px-3 py-1.5 bg-red-50 border border-red-200 hover:bg-red-100 text-red-700 rounded-lg text-xs font-semibold transition-colors"
+                          >
+                            Rimuovi
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {pinFormMode === 'edit' && (
+                      <form onSubmit={handleSavePin} className="border-t border-slate-200 pt-4 space-y-3">
+                        <p className="text-xs font-bold text-slate-700">Modifica il PIN di Sicurezza</p>
+                        
+                        <div>
+                          <label className="block text-xs text-slate-600 mb-1">Password Account Admin</label>
+                          <div className="relative max-w-sm">
+                            <input
+                              type={showPinPassword ? 'text' : 'password'}
+                              value={pinPassword}
+                              onChange={(e) => { setPinPassword(e.target.value); setPinError(null); }}
+                              placeholder="Inserisci password admin"
+                              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none pr-9"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPinPassword(!showPinPassword)}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            >
+                              {showPinPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-sm">
+                          <div>
+                            <label className="block text-xs text-slate-600 mb-1">Nuovo PIN (6 cifre)</label>
+                            <input
+                              type="password"
+                              inputMode="numeric"
+                              maxLength={6}
+                              value={newPinValue}
+                              onChange={(e) => { setNewPinValue(e.target.value.replace(/\D/g, '').slice(0, 6)); setPinError(null); }}
+                              placeholder="123456"
+                              className="w-full text-center tracking-widest font-mono text-sm font-bold px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-600 mb-1">Conferma PIN</label>
+                            <input
+                              type="password"
+                              inputMode="numeric"
+                              maxLength={6}
+                              value={confirmPinValue}
+                              onChange={(e) => { setConfirmPinValue(e.target.value.replace(/\D/g, '').slice(0, 6)); setPinError(null); }}
+                              placeholder="123456"
+                              className="w-full text-center tracking-widest font-mono text-sm font-bold px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        {pinError && <p className="text-xs text-red-600 font-medium">{pinError}</p>}
+
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setPinFormMode('idle')}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            Annulla
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={pinLoading || !pinPassword || newPinValue.length !== 6 || confirmPinValue.length !== 6}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            {pinLoading ? <Loader2 size={13} className="animate-spin" /> : null}
+                            Salva Nuovo PIN
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {pinFormMode === 'remove' && (
+                      <form onSubmit={handleRemovePin} className="border-t border-slate-200 pt-4 space-y-3">
+                        <p className="text-xs font-bold text-red-700">Rimuovi Protezione PIN</p>
+                        <p className="text-xs text-slate-500">
+                          Inserisci la password admin per rimuovere il PIN. I dati nei report torneranno sbloccabili liberamente con l'occhio.
+                        </p>
+                        
+                        <div className="max-w-sm">
+                          <input
+                            type="password"
+                            value={pinPassword}
+                            onChange={(e) => { setPinPassword(e.target.value); setPinError(null); }}
+                            placeholder="Password admin attuale"
+                            className="w-full text-xs px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none"
+                          />
+                        </div>
+
+                        {pinError && <p className="text-xs text-red-600 font-medium">{pinError}</p>}
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPinFormMode('idle')}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            Annulla
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={pinLoading || !pinPassword}
+                            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            {pinLoading ? <Loader2 size={13} className="animate-spin" /> : null}
+                            Conferma Rimozione PIN
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 md:p-5 space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="font-semibold text-slate-800 text-sm">Nessun PIN Configurato</h4>
+                        <p className="text-xs text-slate-500">I report sono sfocati all'avvio ma sbloccabili cliccando sull'occhio.</p>
+                      </div>
+                      {pinFormMode === 'idle' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPinFormMode('edit');
+                            setPinError(null);
+                            setPinPassword('');
+                            setNewPinValue('');
+                            setConfirmPinValue('');
+                          }}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                        >
+                          Configura PIN
+                        </button>
+                      )}
+                    </div>
+
+                    {pinFormMode === 'edit' && (
+                      <form onSubmit={handleSavePin} className="border-t border-slate-200 pt-4 space-y-3">
+                        <p className="text-xs font-bold text-slate-700">Imposta PIN di Sicurezza (6 cifre)</p>
+                        
+                        <div>
+                          <label className="block text-xs text-slate-600 mb-1">Password Account Admin</label>
+                          <div className="relative max-w-sm">
+                            <input
+                              type={showPinPassword ? 'text' : 'password'}
+                              value={pinPassword}
+                              onChange={(e) => { setPinPassword(e.target.value); setPinError(null); }}
+                              placeholder="Inserisci password admin"
+                              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none pr-9"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPinPassword(!showPinPassword)}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            >
+                              {showPinPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-sm">
+                          <div>
+                            <label className="block text-xs text-slate-600 mb-1">PIN (6 cifre)</label>
+                            <input
+                              type="password"
+                              inputMode="numeric"
+                              maxLength={6}
+                              value={newPinValue}
+                              onChange={(e) => { setNewPinValue(e.target.value.replace(/\D/g, '').slice(0, 6)); setPinError(null); }}
+                              placeholder="123456"
+                              className="w-full text-center tracking-widest font-mono text-sm font-bold px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-600 mb-1">Conferma PIN</label>
+                            <input
+                              type="password"
+                              inputMode="numeric"
+                              maxLength={6}
+                              value={confirmPinValue}
+                              onChange={(e) => { setConfirmPinValue(e.target.value.replace(/\D/g, '').slice(0, 6)); setPinError(null); }}
+                              placeholder="123456"
+                              className="w-full text-center tracking-widest font-mono text-sm font-bold px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        {pinError && <p className="text-xs text-red-600 font-medium">{pinError}</p>}
+
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setPinFormMode('idle')}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            Annulla
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={pinLoading || !pinPassword || newPinValue.length !== 6 || confirmPinValue.length !== 6}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            {pinLoading ? <Loader2 size={13} className="animate-spin" /> : null}
+                            Salva PIN
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                )}
               </section>
             </div>
           )}
