@@ -114,7 +114,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // 2. Listen for changes (login, logout, auto-refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      checkAndSetSession(currentSession);
+      
+      setTimeout(() => {
+        void checkAndSetSession(currentSession);
+      }, 0);
       if (!currentSession && inactivityTimerRef.current) {
         clearTimeout(inactivityTimerRef.current);
       }

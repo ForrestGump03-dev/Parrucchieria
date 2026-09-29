@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer, Views, type View } from 'react-big-calendar';
 import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
-import { format, parse, startOfWeek, getDay, addMinutes } from 'date-fns';
+import { format, parse, startOfWeek, getDay, addMinutes, isValid } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Trash2, Edit } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -111,29 +111,41 @@ export default function Agenda() {
     end.setDate(end.getDate() + 35);
 
     try {
-      const data = await getAppointmentsForRange(start, end);
+      // Timeout di sicurezza (10s) per non lasciare l'agenda appesa all'infinito in caso di anomalie di rete
+      const fetchPromise = getAppointmentsForRange(start, end);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout recupero appuntamenti')), 10000)
+      );
+      const data = await Promise.race([fetchPromise, timeoutPromise]);
       
       // Even if data is empty, we must continue to clear events
       const safeData = data || [];
 
-      const calendarEvents = safeData
+      const calendarEvents: CalendarEvent[] = [];
+      safeData
         .filter((apt: Appointment) => apt.price === null)
-        .map((apt: Appointment) => {
-        const evtStart = parseDateTime(apt.date, apt.start_time || '00:00');
-        // USE DURATION
-        const duration = apt.duration || 30;
-        const evtEnd = addMinutes(evtStart, duration);
-        
-        return {
-          id: apt.id,
-          title: `${apt.clients?.first_name} ${apt.clients?.last_name}`, 
-          desc: apt.treatment,
-          start: evtStart,
-          end: evtEnd,
-          resourceId: apt.staff_id || 'unassigned',
-          resource: apt
-        };
-      });
+        .forEach((apt: Appointment) => {
+          const evtStart = parseDateTime(apt.date, apt.start_time || '00:00');
+          if (!isValid(evtStart)) {
+            console.warn('Appuntamento con data o ora non valida ignorato:', apt);
+            return;
+          }
+          // USE DURATION
+          const duration = apt.duration || 30;
+          const evtEnd = addMinutes(evtStart, duration);
+          
+          const clientName = `${apt.clients?.first_name || ''} ${apt.clients?.last_name || ''}`.trim() || 'Cliente';
+
+          calendarEvents.push({
+            id: apt.id,
+            title: clientName, 
+            desc: apt.treatment,
+            start: evtStart,
+            end: evtEnd,
+            resourceId: apt.staff_id || 'unassigned',
+            resource: apt
+          });
+        });
       
       setEvents(calendarEvents);
     } catch (e) {
