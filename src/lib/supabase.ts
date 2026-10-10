@@ -1,8 +1,4 @@
-import {
-  createClient,
-  navigatorLock,
-  NavigatorLockAcquireTimeoutError,
-} from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
 // Queste variabili d'ambiente devono essere impostate nel file .env
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -15,26 +11,7 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error(msg);
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    lock: async (name, acquireTimeout, fn) => {
-      if (typeof navigator === 'undefined' || !navigator.locks) {
-        return await fn();
-      }
-      try {
-        return await navigatorLock(name, acquireTimeout, fn);
-      } catch (err: unknown) {
-        if (
-          acquireTimeout === 0 &&
-          (err instanceof NavigatorLockAcquireTimeoutError ||
-            (err && typeof err === 'object' && 'isAcquireTimeout' in err))
-        ) {
-          // Check non bloccante in background (auto-refresh dei token): il lock è momentaneamente
-          // occupato da un'altra operazione o scheda, saltiamo questo tick in sicurezza senza errori.
-          return undefined as unknown as Awaited<ReturnType<typeof fn>>;
-        }
-        throw err;
-      }
-    },
-  },
-});
+// Manteniamo il lock nativo gestito da Supabase: una sua sostituzione deve sempre
+// rispettare il contratto della libreria e non può trasformare un lock non acquisito
+// in un risultato valido. I listener Auth vengono invece deferiti in AuthContext.
+export const supabase = createClient(supabaseUrl, supabaseKey);

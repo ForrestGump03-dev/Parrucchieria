@@ -63,28 +63,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [signOut]);
 
   useEffect(() => {
-    const checkAndSetSession = async (currentSession: Session | null) => {
+    let isActive = true;
+    let authStateVersion = 0;
+
+    const clearAuthState = () => {
+      sessionRef.current = null;
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      setSession(null);
+      setUser(null);
+      setSubscription(null);
+      setLoading(false);
+    };
+
+    // Gli eventi USER_UPDATED e TOKEN_REFRESHED contengono già una sessione valida.
+    // Evitare di richiamare altre API Auth in questi listener previene la rientranza
+    // sul lock di GoTrue e rende subito disponibile il nuovo metadata del PIN.
+    const syncCurrentSession = (currentSession: Session | null) => {
+      authStateVersion += 1;
+
       if (!currentSession) {
-        setSession(null);
-        setUser(null);
-        setSubscription(null);
-        setLoading(false);
+        clearAuthState();
+        return;
+      }
+
+      sessionRef.current = currentSession;
+      setSession(currentSession);
+      setUser(currentSession.user);
+      resetInactivityTimer();
+      setLoading(false);
+    };
+
+    const checkAndSetSession = async (currentSession: Session | null) => {
+      const requestVersion = ++authStateVersion;
+
+      if (!currentSession) {
+        if (isActive && requestVersion === authStateVersion) {
+          clearAuthState();
+        }
         return;
       }
 
       try {
         const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (!isActive || requestVersion !== authStateVersion) return;
         if (error) throw error;
         
         // If user requires AAL2 but only has AAL1, don't set as authenticated yet
         if (data?.nextLevel === 'aal2' && data?.currentLevel !== 'aal2') {
-          setSession(null);
-          setUser(null);
-          setSubscription(null);
+          clearAuthState();
         } else {
+          sessionRef.current = currentSession;
           setSession(currentSession);
           setUser(currentSession.user);
           resetInactivityTimer();
+          setSubscription(null);
 
           // Fetch subscription data
           const { data: subData, error: subError } = await supabase
@@ -92,38 +124,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .select('*')
             .eq('user_id', currentSession.user.id)
             .single();
-            
-          if (!subError && subData) {
+
+          if (isActive && requestVersion === authStateVersion && !subError && subData) {
             setSubscription(subData);
           }
         }
       } catch (err) {
+        if (!isActive || requestVersion !== authStateVersion) return;
         console.error("Error checking AAL:", err);
         // Fallback safe: force logout if we can't verify 2FA levels
-        setSession(null);
-        setUser(null);
-        setSubscription(null);
+        clearAuthState();
+        return;
       }
-      setLoading(false);
+
+      if (isActive && requestVersion === authStateVersion) {
+        setLoading(false);
+      }
     };
 
     // 1. Check active session on load
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      checkAndSetSession(session);
-    });
+    void supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => checkAndSetSession(session))
+      .catch((err: unknown) => {
+        console.error('Error restoring session:', err);
+        if (isActive) setLoading(false);
+      });
 
     // 2. Listen for changes (login, logout, auto-refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      
-      setTimeout(() => {
-        void checkAndSetSession(currentSession);
-      }, 0);
-      if (!currentSession && inactivityTimerRef.current) {
-        clearTimeout(inactivityTimerRef.current);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
+      if (event === 'SIGNED_OUT' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
+        syncCurrentSession(currentSession);
+        return;
       }
+
+      setTimeout(() => {
+        if (isActive) void checkAndSetSession(currentSession);
+      }, 0);
+
     });
 
     return () => {
+      isActive = false;
+      authStateVersion += 1;
       subscription.unsubscribe();
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     };

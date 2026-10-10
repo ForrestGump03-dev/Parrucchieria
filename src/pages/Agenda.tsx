@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar, dateFnsLocalizer, Views, type View } from 'react-big-calendar';
 import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
 import { format, parse, startOfWeek, getDay, addMinutes, isValid } from 'date-fns';
@@ -11,6 +11,7 @@ import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 import { useAppointments } from '../hooks/useAppointments';
 import { useClients } from '../hooks/useClients';
 import { useStaff } from '../hooks/useStaff';
+import { useAuth } from '../context/AuthContext';
 import AgendaModal from '../components/AgendaModal';
 import ConfirmModal from '../components/ConfirmModal';
 import DeleteClientToast from '../components/DeleteClientToast';
@@ -54,6 +55,8 @@ export default function Agenda() {
   const { getAppointmentsForRange, updateAppointment, deleteAppointment } = useAppointments();
   const { deleteClient } = useClients();
   const { staff, refreshStaff } = useStaff();
+  const { user } = useAuth();
+  const latestFetchRef = useRef(0);
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [view, setView] = useState<View>(Views.DAY);
@@ -104,19 +107,27 @@ export default function Agenda() {
   const [clusterData, setClusterData] = useState<{ isOpen: boolean; events: CalendarEvent[] }>({ isOpen: false, events: [] });
 
   const fetchEvents = useCallback(async () => {
+    const fetchId = ++latestFetchRef.current;
+    if (!user) return;
+
     // Calcola il range in base alla vista
     const start = new Date(date);
     start.setDate(start.getDate() - 35);
     const end = new Date(date);
     end.setDate(end.getDate() + 35);
 
+    let timeoutId: number | undefined;
     try {
       // Timeout di sicurezza (10s) per non lasciare l'agenda appesa all'infinito in caso di anomalie di rete
       const fetchPromise = getAppointmentsForRange(start, end);
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout recupero appuntamenti')), 10000)
-      );
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = window.setTimeout(() => reject(new Error('Timeout recupero appuntamenti')), 10000);
+      });
       const data = await Promise.race([fetchPromise, timeoutPromise]);
+
+      // Le richieste possono sovrapporsi al focus della finestra o a un refresh
+      // del token. Solo l'ultima risposta può aggiornare l'agenda.
+      if (fetchId !== latestFetchRef.current) return;
       
       // Even if data is empty, we must continue to clear events
       const safeData = data || [];
@@ -149,14 +160,16 @@ export default function Agenda() {
       
       setEvents(calendarEvents);
     } catch (e) {
+      if (fetchId !== latestFetchRef.current) return;
       console.error(e);
       toast.error('Impossibile aggiornare agenda');
+    } finally {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     }
-  }, [date, getAppointmentsForRange]);
+  }, [date, getAppointmentsForRange, user]);
 
   // Handle focus re-fetch and initial load
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchEvents();
     
     // Auto-refresh when window regains focus (solves "minimize/restore" issue)
@@ -170,6 +183,7 @@ export default function Agenda() {
     window.addEventListener('click', handleClick);
     
     return () => {
+       latestFetchRef.current += 1;
        window.removeEventListener('click', handleClick);
        window.removeEventListener('focus', onFocus);
     };
