@@ -65,6 +65,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isActive = true;
     let authStateVersion = 0;
+    let authLoadingTimeout: number | null = null;
+
+    const finishAuthLoading = () => {
+      if (authLoadingTimeout !== null) {
+        window.clearTimeout(authLoadingTimeout);
+        authLoadingTimeout = null;
+      }
+      setLoading(false);
+    };
 
     const clearAuthState = () => {
       sessionRef.current = null;
@@ -72,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(null);
       setUser(null);
       setSubscription(null);
-      setLoading(false);
+      finishAuthLoading();
     };
 
     // Gli eventi USER_UPDATED e TOKEN_REFRESHED contengono già una sessione valida.
@@ -90,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(currentSession);
       setUser(currentSession.user);
       resetInactivityTimer();
-      setLoading(false);
+      finishAuthLoading();
     };
 
     const checkAndSetSession = async (currentSession: Session | null) => {
@@ -117,6 +126,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(currentSession.user);
           resetInactivityTimer();
           setSubscription(null);
+          // La sessione è già verificata: un eventuale ritardo sulla tabella
+          // subscriptions non deve bloccare l'intera app sulla schermata di loading.
+          finishAuthLoading();
 
           // Fetch subscription data
           const { data: subData, error: subError } = await supabase
@@ -137,10 +149,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      if (isActive && requestVersion === authStateVersion) {
-        setLoading(false);
-      }
     };
+
+    // Se il browser non riesce a raggiungere Supabase (VPN, proxy o rete offline),
+    // getSession può restare in attesa del refresh token: non lasciamo l'app bloccata.
+    authLoadingTimeout = window.setTimeout(() => {
+      if (!isActive) return;
+      authStateVersion += 1;
+      console.error('Timeout durante il ripristino della sessione Auth');
+      clearAuthState();
+    }, 12000);
 
     // 1. Check active session on load
     void supabase.auth
@@ -148,7 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then(({ data: { session } }) => checkAndSetSession(session))
       .catch((err: unknown) => {
         console.error('Error restoring session:', err);
-        if (isActive) setLoading(false);
+        if (isActive) clearAuthState();
       });
 
     // 2. Listen for changes (login, logout, auto-refresh)
@@ -168,6 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isActive = false;
       authStateVersion += 1;
       subscription.unsubscribe();
+      if (authLoadingTimeout !== null) window.clearTimeout(authLoadingTimeout);
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     };
   }, [resetInactivityTimer]);
