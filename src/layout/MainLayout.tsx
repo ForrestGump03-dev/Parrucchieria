@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Package, Calendar, Users, BarChart3, LogOut, Bell, Settings as SettingsIcon, Megaphone, Menu, X } from 'lucide-react';
+import { Package, Calendar, Users, BarChart3, LogOut, Bell, Settings as SettingsIcon, Megaphone, Menu, X, Scissors } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
@@ -18,6 +18,7 @@ export default function MainLayout() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const { unreadCount } = useNotifications();
 
   // Listen for custom open-settings-modal event (e.g. from forgot PIN in reports)
@@ -73,16 +74,16 @@ export default function MainLayout() {
       )}>
         <div className="p-6 flex items-center gap-3 border-b border-slate-700">
           <div className="w-10 h-10 flex items-center justify-center bg-white rounded-full p-0.5 overflow-hidden">
-            <img
-              src="/logo.png"
-              alt="Logo"
-              className="w-full h-full object-contain"
-              onError={(e) => {
-                // Fallback se logo.png non esiste -> mostra forbici
-                e.currentTarget.style.display = 'none';
-                e.currentTarget.parentElement!.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-600"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>';
-              }}
-            />
+            {logoError ? (
+              <Scissors size={24} className="text-indigo-600" />
+            ) : (
+              <img
+                src="/logo.png"
+                alt="Logo"
+                className="w-full h-full object-contain"
+                onError={() => setLogoError(true)}
+              />
+            )}
           </div>
           <div>
             <h1 className="font-bold text-lg leading-none tracking-wide">Root</h1>
@@ -185,7 +186,11 @@ export default function MainLayout() {
         <div className="md:hidden bg-slate-900 text-white p-4 flex items-center justify-between shadow-md shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 flex items-center justify-center bg-white rounded-full p-0.5 overflow-hidden">
-               <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+               {logoError ? (
+                 <Scissors size={18} className="text-indigo-600" />
+               ) : (
+                 <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" onError={() => setLogoError(true)} />
+               )}
             </div>
             <span className="font-bold">Root Manager</span>
           </div>

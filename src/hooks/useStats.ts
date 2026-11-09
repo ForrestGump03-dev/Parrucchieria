@@ -1,7 +1,19 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { ProductSold } from '../types';
-import { supabase } from '../lib/supabase';
-import { isSameDay, startOfMonth, endOfMonth, isWithinInterval, subDays, differenceInDays, parse, startOfDay, format } from 'date-fns';
+import { supabase, ensureAuthenticatedSession } from '../lib/supabase';
+import {
+  isSameDay,
+  startOfMonth,
+  endOfMonth,
+  isWithinInterval,
+  subDays,
+  addDays,
+  differenceInCalendarDays,
+  parse,
+  startOfDay,
+  endOfDay,
+  format,
+} from 'date-fns';
 import { it } from 'date-fns/locale';
 
 export interface TreatmentStat {
@@ -58,23 +70,35 @@ export type DateRange = {
 export function useStats() {
   const [stats, setStats] = useState<KPIStats | null>(null);
   const [loading, setLoading] = useState(false);
+  const latestFetchRef = useRef(0);
 
   const fetchStats = useCallback(async (customRange?: DateRange) => {
+    const fetchId = ++latestFetchRef.current;
     setLoading(true);
     try {
+      await ensureAuthenticatedSession();
+
       const today = new Date();
       
       // Default range: This Month if not specified
-      const currentRange = customRange || { 
+      const rawRange = customRange || { 
         start: startOfMonth(today), 
         end: endOfMonth(today), 
         label: 'Questo Mese' 
       };
 
-      // Calculate Previous Range for Comparison
-      const dayDiff = differenceInDays(currentRange.end, currentRange.start) + 1;
-      const prevRangeStart = subDays(currentRange.start, dayDiff);
-      const prevRangeEnd = subDays(currentRange.end, dayDiff); 
+      const rangeStart = startOfDay(rawRange.start);
+      const rangeEnd = endOfDay(rawRange.end);
+      const currentRange: DateRange = {
+        start: rangeStart,
+        end: rangeEnd,
+        label: rawRange.label,
+      };
+
+      // Calculate Previous Range for Comparison using calendar days (DST-safe)
+      const dayDiff = Math.max(1, differenceInCalendarDays(rangeEnd, rangeStart) + 1);
+      const prevRangeStart = startOfDay(subDays(rangeStart, dayDiff));
+      const prevRangeEnd = endOfDay(subDays(rangeEnd, dayDiff)); 
 
       // Fetch all PAID appointments with pagination to bypass the 1000-row Supabase limit
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,6 +120,7 @@ export function useStats() {
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
         if (error) throw error;
+        if (fetchId !== latestFetchRef.current) return;
         
         if (data && data.length > 0) {
           allAppointments = allAppointments.concat(data);
@@ -109,8 +134,8 @@ export function useStats() {
         }
       }
 
+      if (fetchId !== latestFetchRef.current) return;
       const appointments = allAppointments;
-      if (appointments.length === 0) return;
 
       // 1. Calculate Global Counters (Fixed)
       let todayRev = 0;
@@ -130,10 +155,9 @@ export function useStats() {
       const staffMap = new Map<string, { name: string; rev: number; count: number }>();
       const dayMap = new Map<string, number>();
 
-      // Init Day Map
+      // Init Day Map (DST-safe via addDays)
       for (let i = 0; i < dayDiff; i++) {
-        const d = new Date(currentRange.start);
-        d.setDate(d.getDate() + i);
+        const d = addDays(rangeStart, i);
         const k = format(d, 'yyyy-MM-dd');
         dayMap.set(k, 0);
       }
@@ -308,10 +332,13 @@ export function useStats() {
           dailyTrend
       });
     } catch (e) {
-      console.error(e);
-      // toast.error("Errore caricamento statistiche");
+      if (fetchId === latestFetchRef.current) {
+        console.error(e);
+      }
     } finally {
-      setLoading(false);
+      if (fetchId === latestFetchRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 

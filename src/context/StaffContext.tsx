@@ -1,8 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, ensureAuthenticatedSession } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { type StaffMember } from '../types';
-import toast from 'react-hot-toast';
 
 interface StaffContextType {
   staff: StaffMember[];
@@ -21,34 +20,30 @@ export function StaffProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchStaff = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setStaff([]);
+      setLoading(false);
+      return;
+    }
     try {
+      await ensureAuthenticatedSession();
       const { data, error } = await supabase
         .from('staff_members')
         .select('*')
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setStaff(data as StaffMember[] || []);
+      setStaff((data as StaffMember[]) || []);
     } catch (error) {
       console.error('Error fetching staff:', error);
-      toast.error('Errore caricamento staff');
+      // Non svuotiamo `staff` in caso di errore transitorio di rete
     } finally {
       setLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
-    fetchStaff();
-  }, [fetchStaff]);
-
-  // Ascolta per il focus della finestra per aggiornare i dati
-  useEffect(() => {
-    const handleFocus = () => {
-      fetchStaff();
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
+    void fetchStaff();
   }, [fetchStaff]);
 
 

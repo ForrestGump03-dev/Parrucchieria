@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, ensureAuthenticatedSession } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { Product } from '../types';
 import toast from 'react-hot-toast';
@@ -13,6 +13,7 @@ export function useProducts() {
     if (!user) return;
     try {
       setLoading(true);
+      await ensureAuthenticatedSession();
       const { data, error } = await supabase
         .from('products')
         .select('*')

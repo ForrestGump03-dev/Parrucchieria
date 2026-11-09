@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, ensureAuthenticatedSession } from '../lib/supabase';
 import { type Treatment } from '../types';
 import { useAuth } from './AuthContext';
 import { TREATMENTS as DEFAULT_TREATMENTS } from '../constants/treatments';
@@ -30,6 +30,7 @@ export function TreatmentProvider({ children }: { children: ReactNode }) {
     }
     try {
       setLoading(true);
+      await ensureAuthenticatedSession();
       const { data, error } = await supabase
         .from('treatments')
         .select('*')

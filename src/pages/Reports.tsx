@@ -5,10 +5,11 @@ import { TrendingUp, TrendingDown, DollarSign, CreditCard, Award, UserCheck, Use
 import ClientDetailView from '../components/ClientDetailView';
 import ReportPinModal from '../components/ReportPinModal';
 import ReportPinSetupModal from '../components/ReportPinSetupModal';
+import ConfirmModal from '../components/ConfirmModal';
 import { useReportSecurity } from '../hooks/useReportSecurity';
 import toast from 'react-hot-toast';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, parse, startOfDay, endOfDay, isValid } from 'date-fns';
-import { supabase } from '../lib/supabase';
+import { supabase, ensureAuthenticatedSession } from '../lib/supabase';
 import { formatBusinessDate, getTodayBusinessDate, parseBusinessDate } from '../lib/date';
 import { createCsvString, cn } from '../lib/utils';
 import { generateExcelReport } from '../utils/generateExcelReport';
@@ -36,6 +37,7 @@ export default function Reports() {
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
   const [pendingUnlockAction, setPendingUnlockAction] = useState<(() => void) | null>(null);
+  const [isSeedConfirmOpen, setIsSeedConfirmOpen] = useState(false);
 
   const handleToggleEye = () => {
     if (isRevealed) {
@@ -85,9 +87,14 @@ export default function Reports() {
     }
   };
 
-  const seedPenetrationTest = async () => {
+  const seedPenetrationTest = () => {
     if (!user) return toast.error("Devi essere loggato");
-    if (!confirm("⚠️ Attenzione: Questo genererà 100 clienti e appuntamenti di test per OGGI. Vuoi procedere?")) return;
+    setIsSeedConfirmOpen(true);
+  };
+
+  const executeSeedPenetrationTest = async () => {
+    setIsSeedConfirmOpen(false);
+    if (!user) return toast.error("Devi essere loggato");
     
     const toastId = toast.loading("Generazione dati test...");
     try {
@@ -200,19 +207,19 @@ export default function Reports() {
     }
   };
 
-  const [selectedRange, setSelectedRange] = useState<DateRange>({
+  const [selectedRange, setSelectedRange] = useState<DateRange>(() => ({
     start: startOfMonth(new Date()),
     end: endOfMonth(new Date()),
     label: 'Questo Mese'
-  });
+  }));
 
   const [clientViewMode, setClientViewMode] = useState<'faith' | 'sleep'>('faith');
   const [showDetailView, setShowDetailView] = useState(false);
   const [showCustomPicker, setShowCustomPicker] = useState(false);
-  const [customDates, setCustomDates] = useState({
-    start: format(new Date(), 'yyyy-MM-dd'),
-    end: format(new Date(), 'yyyy-MM-dd')
-  });
+  const [customDates, setCustomDates] = useState(() => ({
+    start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+    end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
+  }));
 
   useEffect(() => {
     fetchStats(selectedRange);
@@ -250,6 +257,10 @@ export default function Reports() {
       default:
         return;
     }
+    setCustomDates({
+      start: format(newRange.start, 'yyyy-MM-dd'),
+      end: format(newRange.end, 'yyyy-MM-dd')
+    });
     setSelectedRange(newRange);
   };
 
@@ -279,7 +290,7 @@ export default function Reports() {
     });
   };
 
-  if (loading && !stats) {
+  if (!showDetailView && loading && !stats) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
@@ -287,86 +298,96 @@ export default function Reports() {
     );
   }
 
-  if (showDetailView) {
-    return (
-      <ClientDetailView
-        range={selectedRange}
-        onClose={() => setShowDetailView(false)}
-        isRevealed={isRevealed}
-        onToggleReveal={handleToggleEye}
-        onRequestUnlock={handleRequireUnlock}
-      />
-    );
-  }
-
   return (
-    <div className="space-y-8 pb-10">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3 flex-wrap">
-            <div>
-               <h1 className="text-2xl font-bold text-slate-800">Analisi Finanziaria</h1>
-               <p className="text-slate-500 text-sm">Monitora le performance del tuo salone</p>
-               {import.meta.env.DEV && (
-                  <button 
-                    onClick={seedPenetrationTest}
-                    className="mt-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded border border-amber-200 hover:bg-amber-200"
-                  >
-                    🛠️ Seed Test (100 Clienti)
-                  </button>
-               )}
-            </div>
-            <button
-              onClick={() => setShowDetailView(true)}
-              className="flex items-center gap-2 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-300 px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm mt-0.5"
-            >
-              <Database size={15} />
-              Registro Dettagliato
-              <ArrowRight size={14} className="text-indigo-400" />
-            </button>
+    <>
+      {showDetailView ? (
+        <ClientDetailView
+          range={selectedRange}
+          onRangeChange={setSelectedRange}
+          customDates={customDates}
+          onCustomDatesChange={setCustomDates}
+          showCustomPicker={showCustomPicker}
+          onShowCustomPickerChange={setShowCustomPicker}
+          onClose={() => setShowDetailView(false)}
+          isRevealed={isRevealed}
+          onToggleReveal={handleToggleEye}
+          onRequestUnlock={handleRequireUnlock}
+        />
+      ) : (
+        <div className="space-y-8 pb-10">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3 flex-wrap">
+                <div>
+                   <h1 className="text-2xl font-bold text-slate-800">Analisi Finanziaria</h1>
+                   <p className="text-slate-500 text-sm">Monitora le performance del tuo salone</p>
+                   {import.meta.env.DEV && (
+                      <button 
+                        onClick={seedPenetrationTest}
+                        className="mt-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded border border-amber-200 hover:bg-amber-200"
+                      >
+                        🛠️ Seed Test (100 Clienti)
+                      </button>
+                   )}
+                </div>
+                <button
+                  onClick={() => setShowDetailView(true)}
+                  className="flex items-center gap-2 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-300 px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm mt-0.5"
+                >
+                  <Database size={15} />
+                  Registro Dettagliato
+                  <ArrowRight size={14} className="text-indigo-400" />
+                </button>
 
-            <button
-              onClick={handleToggleEye}
-              className={cn(
-                "flex items-center gap-2 border px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm mt-0.5",
-                isRevealed
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-              )}
-              title={isRevealed ? "Nascondi fatturato (sfoca)" : "Mostra fatturato (richiede PIN)"}
-            >
-              {isRevealed ? <EyeOff size={16} className="text-emerald-600" /> : <Eye size={16} className="text-slate-500" />}
-              <span>{isRevealed ? "Nascondi Fatturato" : "Mostra Fatturato"}</span>
-            </button>
-          </div>
-          
-          <div className="flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm overflow-x-auto">
-             {[
-               { id: 'today', label: 'Oggi' },
-               { id: 'week', label: 'Settimana' },
-               { id: 'month', label: 'Mese' },
-               { id: 'lastMonth', label: 'Mese Scorso' },
-               { id: 'year', label: 'Anno' },
-               { id: 'custom', label: 'Personalizzato' }
-             ].map((period) => (
-               <button
-                 key={period.id}
-                 onClick={() => handleRangeChange(period.id)}
-                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                   selectedRange?.label === (period.id === 'lastMonth' ? 'Mese Scorso' : 
-                                             period.id === 'year' ? "Quest'Anno" : 
-                                             period.id === 'today' ? 'Oggi' : 
-                                             period.id === 'week' ? 'Questa Settimana' : 
-                                             period.id === 'custom' ? 'Personalizzato' : 'Questo Mese')
-                     ? 'bg-indigo-100 text-indigo-700' 
-                     : 'text-slate-600 hover:bg-slate-50'
-                 }`}
-               >
-                 {period.label}
-               </button>
-             ))}
-          </div>
-        </div>
+                <button
+                  onClick={handleToggleEye}
+                  className={cn(
+                    "flex items-center gap-2 border px-3.5 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm mt-0.5",
+                    isRevealed
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                      : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                  )}
+                  title={isRevealed ? "Nascondi fatturato (sfoca)" : "Mostra fatturato (richiede PIN)"}
+                >
+                  {isRevealed ? <EyeOff size={16} className="text-emerald-600" /> : <Eye size={16} className="text-slate-500" />}
+                  <span>{isRevealed ? "Nascondi Fatturato" : "Mostra Fatturato"}</span>
+                </button>
+              </div>
+              
+              <div className="flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm overflow-x-auto">
+                 {[
+                   { id: 'today', label: 'Oggi' },
+                   { id: 'week', label: 'Settimana' },
+                   { id: 'month', label: 'Mese' },
+                   { id: 'lastMonth', label: 'Mese Scorso' },
+                   { id: 'year', label: 'Anno' },
+                   { id: 'custom', label: 'Personalizzato' }
+                 ].map((period) => {
+                   const targetLabel =
+                     period.id === 'lastMonth' ? 'Mese Scorso' :
+                     period.id === 'year' ? "Quest'Anno" :
+                     period.id === 'today' ? 'Oggi' :
+                     period.id === 'week' ? 'Questa Settimana' :
+                     period.id === 'custom' ? 'Personalizzato' : 'Questo Mese';
+                   const isSelected = period.id === 'custom'
+                     ? (showCustomPicker || selectedRange?.label === 'Personalizzato')
+                     : (!showCustomPicker && selectedRange?.label === targetLabel);
+                   return (
+                     <button
+                       key={period.id}
+                       onClick={() => handleRangeChange(period.id)}
+                       className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                         isSelected
+                           ? 'bg-indigo-100 text-indigo-700' 
+                           : 'text-slate-600 hover:bg-slate-50'
+                       }`}
+                     >
+                       {period.label}
+                     </button>
+                   );
+                 })}
+              </div>
+            </div>
 
         {showCustomPicker && (
           <div className="md:self-end bg-white p-3 rounded-lg border border-indigo-100 shadow-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
@@ -677,10 +698,12 @@ export default function Reports() {
             </div>
       </div>
       
-      {/* EXPORT SECTION */}
-      <BackupSection range={selectedRange} isRevealed={isRevealed} onRequestUnlock={handleRequireUnlock} />
+          {/* EXPORT SECTION */}
+          <BackupSection range={selectedRange} isRevealed={isRevealed} onRequestUnlock={handleRequireUnlock} />
+        </div>
+      )}
 
-      {/* MODALI DI SICUREZZA PIN */}
+      {/* MODALI DI SICUREZZA PIN (Sempre montati anche in Registro Dettagliato) */}
       <ReportPinModal
         isOpen={isPinModalOpen}
         onClose={() => {
@@ -698,7 +721,17 @@ export default function Reports() {
         }}
         onSuccess={handlePinSuccess}
       />
-    </div>
+
+      <ConfirmModal
+        isOpen={isSeedConfirmOpen}
+        title="Genera Dati di Test"
+        message="⚠️ Attenzione: Questo genererà 100 clienti e appuntamenti di test per OGGI. Vuoi procedere?"
+        confirmText="Genera Dati"
+        cancelText="Annulla"
+        onConfirm={() => { void executeSeedPenetrationTest(); }}
+        onCancel={() => setIsSeedConfirmOpen(false)}
+      />
+    </>
   );
 }
 
@@ -735,21 +768,42 @@ function BackupSection({ range, isRevealed, onRequestUnlock }: BackupSectionProp
     const performReportDownload = async () => {
         setLoadingReport(true);
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("Utente non autenticato");
+            const session = await ensureAuthenticatedSession();
+            if (!session.user) throw new Error("Utente non autenticato");
             
-            // --- USER REPORT (Clean Data for selected range) ---
-            const { data: reportData, error: reportError } = await supabase
-                .from('appointments')
-                .select('date, start_time, treatment, price, notes, clients(id, first_name, last_name), staff_members(name)')
-                .gte('date', formatBusinessDate(range.start))
-                .lte('date', formatBusinessDate(range.end))
-                .not('price', 'is', null) // Only paid
-                .order('date', { ascending: false });
-            
-            if (reportError) throw reportError;
+            // --- USER REPORT (Clean Data for selected range, paginated) ---
+            const startStr = formatBusinessDate(range.start);
+            const endStr = formatBusinessDate(range.end);
+            const pageSize = 1000;
+            let page = 0;
+            let hasMore = true;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let reportData: any[] = [];
 
-            if (reportData && reportData.length > 0) {
+            while (hasMore) {
+                const { data: pageData, error: reportError } = await supabase
+                    .from('appointments')
+                    .select('date, start_time, treatment, price, notes, clients(id, first_name, last_name), staff_members(name)')
+                    .gte('date', startStr)
+                    .lte('date', endStr)
+                    .not('price', 'is', null) // Only paid
+                    .order('date', { ascending: false })
+                    .range(page * pageSize, (page + 1) * pageSize - 1);
+                
+                if (reportError) throw reportError;
+                if (pageData && pageData.length > 0) {
+                    reportData = reportData.concat(pageData);
+                    if (pageData.length < pageSize) {
+                        hasMore = false;
+                    } else {
+                        page++;
+                    }
+                } else {
+                    hasMore = false;
+                }
+            }
+
+            if (reportData.length > 0) {
                 await generateExcelReport(reportData, range.label, range.start, range.end);
                 toast.success('Report Excel creato con successo!');
             } else {
@@ -768,34 +822,71 @@ function BackupSection({ range, isRevealed, onRequestUnlock }: BackupSectionProp
         setLoadingZip(true);
         
         try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const session = await ensureAuthenticatedSession();
+            const user = session.user;
             if (!user) throw new Error("Utente non autenticato");
             
             const dateStr = format(new Date(), 'yyyy-MM-dd_HH-mm');
             const zip = new JSZip();
 
-            // --- TECHNICAL BACKUP (Full Dump) ---
-            
-            // Clients
-            const { data: clients, error: clientError } = await supabase
-                .from('clients')
-                .select('*')
-                .eq('user_id', user.id);
-            
-            if (clientError) throw clientError;
+            // --- TECHNICAL BACKUP (Full Dump with pagination) ---
+            const pageSize = 1000;
 
-            // Full History
-            const { data: appointments, error: apptError } = await supabase
-                .from('appointments')
-                .select('*, clients(first_name, last_name)')
-                .eq('user_id', user.id) 
-                .order('date', { ascending: false });
+            // 1. Clients (paginated)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let clients: any[] = [];
+            let clientPage = 0;
+            let moreClients = true;
+            while (moreClients) {
+                const { data: clientBatch, error: clientError } = await supabase
+                    .from('clients')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: true })
+                    .range(clientPage * pageSize, (clientPage + 1) * pageSize - 1);
+                
+                if (clientError) throw clientError;
+                if (clientBatch && clientBatch.length > 0) {
+                    clients = clients.concat(clientBatch);
+                    if (clientBatch.length < pageSize) {
+                        moreClients = false;
+                    } else {
+                        clientPage++;
+                    }
+                } else {
+                    moreClients = false;
+                }
+            }
 
-            if (apptError) throw apptError;
+            // 2. Full History (paginated)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let appointments: any[] = [];
+            let apptPage = 0;
+            let moreAppts = true;
+            while (moreAppts) {
+                const { data: apptBatch, error: apptError } = await supabase
+                    .from('appointments')
+                    .select('*, clients(first_name, last_name)')
+                    .eq('user_id', user.id) 
+                    .order('date', { ascending: false })
+                    .range(apptPage * pageSize, (apptPage + 1) * pageSize - 1);
+
+                if (apptError) throw apptError;
+                if (apptBatch && apptBatch.length > 0) {
+                    appointments = appointments.concat(apptBatch);
+                    if (apptBatch.length < pageSize) {
+                        moreAppts = false;
+                    } else {
+                        apptPage++;
+                    }
+                } else {
+                    moreAppts = false;
+                }
+            }
             
             let hasFiles = false;
 
-            if (clients && clients.length > 0) {
+            if (clients.length > 0) {
                  const csvStr = createCsvString(clients);
                  if (csvStr) {
                      zip.file(`BACKUP_Clienti_${dateStr}.csv`, csvStr);
@@ -803,7 +894,7 @@ function BackupSection({ range, isRevealed, onRequestUnlock }: BackupSectionProp
                  }
             }
             
-            if (appointments && appointments.length > 0) {
+            if (appointments.length > 0) {
                  // Flatten structure for CSV
                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                  const flatAppts = appointments.map((a: any) => ({
@@ -834,6 +925,7 @@ function BackupSection({ range, isRevealed, onRequestUnlock }: BackupSectionProp
                  document.body.appendChild(link);
                  link.click();
                  document.body.removeChild(link);
+                 window.setTimeout(() => URL.revokeObjectURL(url), 1000);
                  toast.success(`Backup di sicurezza salvato!`);
                  localStorage.setItem('lastBackup', Date.now().toString());
             } else {

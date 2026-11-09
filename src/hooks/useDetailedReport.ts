@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
-import { isWithinInterval, startOfDay, parse } from 'date-fns';
+import { useState, useCallback, useRef } from 'react';
+import { supabase, ensureAuthenticatedSession } from '../lib/supabase';
+import { isWithinInterval, startOfDay, endOfDay, parse } from 'date-fns';
 import { type DateRange } from './useStats';
 
 // ─── Tipi esposti ────────────────────────────────────────────────────────────
@@ -53,10 +53,14 @@ export interface DetailedReportData {
 export function useDetailedReport() {
   const [data, setData] = useState<DetailedReportData | null>(null);
   const [loading, setLoading] = useState(false);
+  const latestFetchRef = useRef(0);
 
   const fetchDetailedReport = useCallback(async (range: DateRange) => {
+    const fetchId = ++latestFetchRef.current;
     setLoading(true);
     try {
+      await ensureAuthenticatedSession();
+
       // Fetch TUTTI gli appuntamenti pagati con paginazione per aggirare il limite di 1000 righe di Supabase
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let rows: any[] = [];
@@ -77,6 +81,7 @@ export function useDetailedReport() {
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
         if (error) throw error;
+        if (fetchId !== latestFetchRef.current) return;
         
         if (pageData && pageData.length > 0) {
           rows = rows.concat(pageData);
@@ -90,9 +95,10 @@ export function useDetailedReport() {
         }
       }
 
-      if (rows.length === 0) return;
+      if (fetchId !== latestFetchRef.current) return;
 
       const rangeStart = startOfDay(range.start);
+      const rangeEnd = endOfDay(range.end);
 
       // Determina quali clienti hanno ALMENO una visita precedente al range
       const clientsBeforeRange = new Set<string>();
@@ -102,7 +108,7 @@ export function useDetailedReport() {
         const aptDate = startOfDay(parse(apt.date, 'yyyy-MM-dd', new Date()));
         if (aptDate < rangeStart) {
           clientsBeforeRange.add(apt.client_id as string);
-        } else if (isWithinInterval(aptDate, { start: rangeStart, end: range.end })) {
+        } else if (isWithinInterval(aptDate, { start: rangeStart, end: rangeEnd })) {
           inRangeRows.push(apt);
         }
       });
@@ -218,9 +224,13 @@ export function useDetailedReport() {
         },
       });
     } catch (e) {
-      console.error('useDetailedReport error:', e);
+      if (fetchId === latestFetchRef.current) {
+        console.error('useDetailedReport error:', e);
+      }
     } finally {
-      setLoading(false);
+      if (fetchId === latestFetchRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 

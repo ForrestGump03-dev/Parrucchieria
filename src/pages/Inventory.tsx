@@ -6,6 +6,220 @@ import ConfirmModal from '../components/ConfirmModal';
 import BarcodeScanner from '../components/BarcodeScanner';
 import toast from 'react-hot-toast';
 
+interface ProductModalProps {
+  products: Product[];
+  editingProduct: Product | null;
+  onSelectExistingProduct: (product: Product) => void;
+  onSave: (id: string | null, data: Omit<Product, 'id' | 'created_at' | 'user_id'>) => Promise<void>;
+  onClose: () => void;
+}
+
+function ProductModal({
+  products,
+  editingProduct,
+  onSelectExistingProduct,
+  onSave,
+  onClose,
+}: ProductModalProps) {
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [duplicateBarcodeCandidate, setDuplicateBarcodeCandidate] = useState<{
+    product: Product;
+    code: string;
+  } | null>(null);
+  const [form, setForm] = useState<{
+    name: string;
+    brand: string;
+    price: string | number;
+    cost_price: string | number;
+    stock: string | number;
+    min_stock: string | number;
+    barcode: string;
+  }>({
+    name: editingProduct?.name || '',
+    brand: editingProduct?.brand || '',
+    price: editingProduct?.price !== undefined ? editingProduct.price : '',
+    cost_price: editingProduct?.cost_price !== undefined ? editingProduct.cost_price : '',
+    stock: editingProduct?.stock !== undefined ? editingProduct.stock : '',
+    min_stock: editingProduct?.min_stock !== undefined ? editingProduct.min_stock : 5,
+    barcode: editingProduct?.barcode || '',
+  });
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const productData = {
+      ...form,
+      price: form.price === '' ? 0 : Number(form.price),
+      cost_price: form.cost_price === '' ? 0 : Number(form.cost_price),
+      stock: form.stock === '' ? 0 : Number(form.stock),
+      min_stock: form.min_stock === '' ? 0 : Number(form.min_stock),
+    };
+
+    await onSave(editingProduct ? editingProduct.id : null, productData);
+    onClose();
+  };
+
+  const handleNumChange = (field: keyof typeof form, value: string) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleBarcodeScanned = (code: string) => {
+    setIsScannerOpen(false);
+
+    const existingProduct = products.find(p => p.barcode === code && p.id !== editingProduct?.id);
+
+    if (existingProduct) {
+      setDuplicateBarcodeCandidate({ product: existingProduct, code });
+      return;
+    }
+
+    setForm(prev => ({ ...prev, barcode: code }));
+    toast.success('Codice a barre scansionato!');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      {isScannerOpen && <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setIsScannerOpen(false)} />}
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold">{editingProduct ? 'Modifica Prodotto' : 'Nuovo Prodotto'}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X size={24} />
+          </button>
+        </div>
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div>
+             <label className="block text-sm font-medium mb-1 text-slate-700 w-full flex justify-between items-end">
+               Codice a Barre (Opzionale)
+               <button
+                 type="button"
+                 onClick={() => setIsScannerOpen(true)}
+                 className="text-xs flex items-center gap-1 text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded transition-colors border border-indigo-100 shadow-sm"
+               >
+                 <Camera size={14} /> Scansiona
+               </button>
+             </label>
+             <input
+               value={form.barcode}
+               onChange={e => setForm({...form, barcode: e.target.value})}
+               className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-slate-50 font-mono text-sm"
+               placeholder="Scansiona o digita..."
+             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1 text-slate-700">Nome Prodotto</label>
+            <input
+              required
+              value={form.name}
+              onChange={e => setForm({...form, name: e.target.value})}
+              className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+              placeholder="Es. Shampoo Ristrutturante"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1 text-slate-700">Brand</label>
+            <input
+              value={form.brand}
+              onChange={e => setForm({...form, brand: e.target.value})}
+              className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+              placeholder="Es. Kerastase"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+             <div>
+               <label className="block text-sm font-medium mb-1 text-slate-700">Prezzo Vendita (€)</label>
+               <input
+                 type="number"
+                 step="0.50"
+                 required
+                 value={form.price}
+                 onChange={e => handleNumChange('price', e.target.value)}
+                 className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                 placeholder="0.00"
+               />
+             </div>
+             <div>
+               <label className="block text-sm font-medium mb-1 text-slate-700">Costo Acquisto (€)</label>
+               <input
+                 type="number"
+                 step="0.50"
+                 value={form.cost_price}
+                 onChange={e => handleNumChange('cost_price', e.target.value)}
+                 className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                 placeholder="0.00"
+               />
+             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+             <div>
+               <label className="block text-sm font-medium mb-1 text-slate-700">Giacenza Attuale</label>
+               <input
+                 type="number"
+                 required
+                 value={form.stock}
+                 onChange={e => handleNumChange('stock', e.target.value)}
+                 className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                 placeholder="0"
+               />
+             </div>
+             <div>
+               <label className="block text-sm font-medium mb-1 text-slate-700" title="Avvisami quando la scorta scende sotto questo valore">
+                 Soglia Minima
+               </label>
+               <input
+                 type="number"
+                 value={form.min_stock}
+                 onChange={e => handleNumChange('min_stock', e.target.value)}
+                 className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                 placeholder="5"
+               />
+             </div>
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-indigo-600 text-white py-2.5 rounded-lg hover:bg-indigo-700 font-medium shadow-sm active:scale-[0.98] transition-all"
+          >
+            {editingProduct ? 'Salva Modifiche' : 'Crea Prodotto'}
+          </button>
+        </form>
+      </div>
+
+      <ConfirmModal
+        isOpen={!!duplicateBarcodeCandidate}
+        title="Codice a Barre Esistente"
+        message={
+          duplicateBarcodeCandidate
+            ? `Questo codice a barre è già associato al prodotto "${duplicateBarcodeCandidate.product.name}". Vuoi aggiornarne la giacenza invece di creare un duplicato?`
+            : ''
+        }
+        confirmText="Aggiorna Esistente"
+        cancelText="Mantieni Nuovo"
+        onConfirm={() => {
+          if (!duplicateBarcodeCandidate) return;
+          const existing = duplicateBarcodeCandidate.product;
+          setDuplicateBarcodeCandidate(null);
+          onSelectExistingProduct(existing);
+          setForm({
+            name: existing.name,
+            brand: existing.brand || '',
+            price: existing.price,
+            cost_price: existing.cost_price || '',
+            stock: existing.stock,
+            min_stock: existing.min_stock || 5,
+            barcode: existing.barcode || '',
+          });
+        }}
+        onCancel={() => {
+          if (!duplicateBarcodeCandidate) return;
+          const code = duplicateBarcodeCandidate.code;
+          setDuplicateBarcodeCandidate(null);
+          setForm(prev => ({ ...prev, barcode: code }));
+          toast.success('Codice a barre scansionato!');
+        }}
+      />
+    </div>
+  );
+}
+
 export default function Inventory() {
   const { products, loading, addProduct, updateProduct, deleteProduct } = useProducts();
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,182 +249,15 @@ export default function Inventory() {
     }
   };
 
-  const ProductModal = () => {
-    const [isScannerOpen, setIsScannerOpen] = useState(false);
-    const [form, setForm] = useState<{
-        name: string;
-        brand: string;
-        price: string | number;
-        cost_price: string | number;
-        stock: string | number;
-        min_stock: string | number;
-        barcode: string;
-      }>({
-      name: editingProduct?.name || '',
-      brand: editingProduct?.brand || '',
-      price: editingProduct?.price !== undefined ? editingProduct.price : '',
-      cost_price: editingProduct?.cost_price !== undefined ? editingProduct.cost_price : '',
-      stock: editingProduct?.stock !== undefined ? editingProduct.stock : '',
-      min_stock: editingProduct?.min_stock !== undefined ? editingProduct.min_stock : 5,
-      barcode: editingProduct?.barcode || ''
-    });
-
-    const onSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      const productData = {
-        ...form,
-        price: form.price === '' ? 0 : Number(form.price),
-        cost_price: form.cost_price === '' ? 0 : Number(form.cost_price),
-        stock: form.stock === '' ? 0 : Number(form.stock),
-        min_stock: form.min_stock === '' ? 0 : Number(form.min_stock),
-      };
-
-      if (editingProduct) {
-        await updateProduct(editingProduct.id, productData);
-      } else {
-        await addProduct(productData);
-      }
-      setIsModalOpen(false);
-      setEditingProduct(null);
-    };
-
-    const handleNumChange = (field: keyof typeof form, value: string) => {
-      setForm(prev => ({ ...prev, [field]: value }));
-    };
-
-    const handleBarcodeScanned = async (code: string) => {
-      setIsScannerOpen(false);
-
-      const existingProduct = products.find(p => p.barcode === code && p.id !== editingProduct?.id);
-
-      if (existingProduct) {
-        if (window.confirm(`Questo codice a barre è già associato al prodotto "${existingProduct.name}". Vuoi aggiornarne la giacenza invece di creare un duplicato?`)) {
-           setEditingProduct(existingProduct);
-           setForm({
-             name: existingProduct.name,
-             brand: existingProduct.brand || '',
-             price: existingProduct.price,
-             cost_price: existingProduct.cost_price || '',
-             stock: existingProduct.stock,
-             min_stock: existingProduct.min_stock || 5,
-             barcode: existingProduct.barcode || ''
-           });
-           return;
-        }
-      }
-
-      setForm(prev => ({...prev, barcode: code}));
-      toast.success('Codice a barre scansionato!');
-    };
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-        {isScannerOpen && <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setIsScannerOpen(false)} />}
-        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-bold">{editingProduct ? 'Modifica Prodotto' : 'Nuovo Prodotto'}</h3>
-            <button onClick={() => { setIsModalOpen(false); setEditingProduct(null); }} className="text-slate-400 hover:text-slate-600">
-              <X size={24} />
-            </button>
-          </div>
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div>
-               <label className="block text-sm font-medium mb-1 text-slate-700 w-full flex justify-between items-end">
-                 Codice a Barre (Opzionale)
-                 <button
-                   type="button"
-                   onClick={() => setIsScannerOpen(true)}
-                   className="text-xs flex items-center gap-1 text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded transition-colors border border-indigo-100 shadow-sm"
-                 >
-                   <Camera size={14} /> Scansiona
-                 </button>
-               </label>
-               <input
-                 value={form.barcode}
-                 onChange={e => setForm({...form, barcode: e.target.value})}
-                 className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-slate-50 font-mono text-sm"
-                 placeholder="Scansiona o digita..."
-               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1 text-slate-700">Nome Prodotto</label>
-              <input
-                required
-                value={form.name}
-                onChange={e => setForm({...form, name: e.target.value})}
-                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                placeholder="Es. Shampoo Ristrutturante"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1 text-slate-700">Brand</label>
-              <input
-                value={form.brand}
-                onChange={e => setForm({...form, brand: e.target.value})}
-                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                placeholder="Es. Kerastase"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-               <div>
-                 <label className="block text-sm font-medium mb-1 text-slate-700">Prezzo Vendita (€)</label>
-                 <input
-                   type="number"
-                   step="0.50"
-                   required
-                   value={form.price}
-                   onChange={e => handleNumChange('price', e.target.value)}
-                   className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                   placeholder="0.00"
-                 />
-               </div>
-               <div>
-                 <label className="block text-sm font-medium mb-1 text-slate-700">Costo Acquisto (€)</label>
-                 <input
-                   type="number"
-                   step="0.50"
-                   value={form.cost_price}
-                   onChange={e => handleNumChange('cost_price', e.target.value)}
-                   className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                   placeholder="0.00"
-                 />
-               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-               <div>
-                 <label className="block text-sm font-medium mb-1 text-slate-700">Giacenza Attuale</label>
-                 <input
-                   type="number"
-                   required
-                   value={form.stock}
-                   onChange={e => handleNumChange('stock', e.target.value)}
-                   className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                   placeholder="0"
-                 />
-               </div>
-               <div>
-                 <label className="block text-sm font-medium mb-1 text-slate-700" title="Avvisami quando la scorta scende sotto questo valore">
-                   Soglia Minima
-                 </label>
-                 <input
-                   type="number"
-                   value={form.min_stock}
-                   onChange={e => handleNumChange('min_stock', e.target.value)}
-                   className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                   placeholder="5"
-                 />
-               </div>
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-indigo-600 text-white py-2.5 rounded-lg hover:bg-indigo-700 font-medium shadow-sm active:scale-[0.98] transition-all"
-            >
-              {editingProduct ? 'Salva Modifiche' : 'Crea Prodotto'}
-            </button>
-          </form>
-        </div>
-      </div>
-    );
+  const handleSaveProduct = async (
+    id: string | null,
+    productData: Omit<Product, 'id' | 'created_at' | 'user_id'>
+  ) => {
+    if (id) {
+      await updateProduct(id, productData);
+    } else {
+      await addProduct(productData);
+    }
   };
 
   if (loading) return <div className="p-8">Caricamento...</div>;
@@ -301,7 +348,18 @@ export default function Inventory() {
           </tbody>
         </table>
       </div>
-      {isModalOpen && <ProductModal />}
+      {isModalOpen && (
+        <ProductModal
+          products={products}
+          editingProduct={editingProduct}
+          onSelectExistingProduct={setEditingProduct}
+          onSave={handleSaveProduct}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingProduct(null);
+          }}
+        />
+      )}
 
       <ConfirmModal
         isOpen={!!itemToDelete}

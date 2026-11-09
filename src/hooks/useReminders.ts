@@ -29,28 +29,46 @@ const DEFAULT_SETTINGS: NotificationSettings = {
   winbackDays: 60
 };
 
-export function useReminders() {
+function loadNotificationSettings(): NotificationSettings {
+  try {
+    const saved = localStorage.getItem('notificationSettings');
+    if (!saved) return DEFAULT_SETTINGS;
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+  } catch (e) {
+    console.error('Failed to parse notificationSettings:', e);
+    return DEFAULT_SETTINGS;
+  }
+}
+
+// Set condiviso a livello di modulo per evitare notifiche duplicate tra rimontaggi o istanze multiple
+const notifiedAppointmentIds = new Set<string>();
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth-signed-out', () => {
+    notifiedAppointmentIds.clear();
+  });
+}
+
+export function useReminders(options?: { enablePolling?: boolean }) {
+  const enablePolling = options?.enablePolling ?? true;
   const { user } = useAuth();
   const { addNotification } = useNotifications();
-  const [settings, setSettings] = useState<NotificationSettings>(() => {
-    const saved = localStorage.getItem('notificationSettings');
-    return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
-  });
-
-  const [notifiedIds, setNotifiedIds] = useState<Set<string>>(new Set());
+  const [settings, setSettings] = useState<NotificationSettings>(loadNotificationSettings);
   
   // Ref per accedere allo stato aggiornato dentro il setInterval
   const settingsRef = useRef(settings);
-  const notifiedIdsRef = useRef(notifiedIds);
 
   useEffect(() => {
     settingsRef.current = settings;
-    localStorage.setItem('notificationSettings', JSON.stringify(settings));
   }, [settings]);
 
   useEffect(() => {
-    notifiedIdsRef.current = notifiedIds;
-  }, [notifiedIds]);
+    const handleSync = () => {
+      setSettings(loadNotificationSettings());
+    };
+    window.addEventListener('notification-settings-updated', handleSync);
+    return () => window.removeEventListener('notification-settings-updated', handleSync);
+  }, []);
 
   const sendNotification = useCallback((title: string, body: string, type: 'info' | 'backup' = 'info') => {
     // 1. Add to In-App Notification Center
@@ -98,23 +116,20 @@ export function useReminders() {
 
             if (!error && appointments) {
                 appointments.forEach(apt => {
-                    if (notifiedIdsRef.current.has(apt.id)) return;
+                    if (notifiedAppointmentIds.has(apt.id)) return;
 
-                    const aptTime = parse(`${apt.date} ${apt.start_time}`, 'yyyy-MM-dd HH:mm', new Date());
+                    const normalizedTime = (apt.start_time || '00:00').slice(0, 5);
+                    const aptTime = parse(`${apt.date} ${normalizedTime}`, 'yyyy-MM-dd HH:mm', new Date());
                     const diff = differenceInMinutes(aptTime, now);
                     const advance = settingsRef.current.advanceMinutes;
                     
                     if (diff <= advance && diff >= 0) {
+                        notifiedAppointmentIds.add(apt.id);
                         sendNotification(
                             "Promemoria Appuntamento", 
-                            `${apt.clients?.first_name} ${apt.clients?.last_name} tra ${diff} minuti (${apt.start_time})`,
+                            `${apt.clients?.first_name || ''} ${apt.clients?.last_name || ''} tra ${diff} minuti (${normalizedTime})`.trim(),
                             'info'
                         );
-                        setNotifiedIds(prev => {
-                            const newSet = new Set(prev);
-                            newSet.add(apt.id);
-                            return newSet;
-                        });
                     }
                 });
             }
@@ -127,7 +142,7 @@ export function useReminders() {
   
   // Check Backup Reminder (On Load & Interval)
   const checkBackupReminder = useCallback(() => {
-      if (!settingsRef.current.backupReminderEnabled) return;
+      if (!user || !settingsRef.current.backupReminderEnabled) return;
       
       const now = Date.now();
       const lastBackupStr = localStorage.getItem('lastBackup');
@@ -162,33 +177,46 @@ export function useReminders() {
           // Timestamp this reminder to snooze it for 'interval' days
           localStorage.setItem('lastBackupReminderShown', now.toString());
       }
-  }, [sendNotification]);
+  }, [user, sendNotification]);
 
 
   // Main Interval
   useEffect(() => {
+      if (!enablePolling) return;
+
       // Check appointments immediately
-      checkAppointments();
+      void checkAppointments();
       
       // Delay Backup Check (5 seconds) to avoid Splash Screen collision and ensure app is ready
       const backupTimer = setTimeout(() => {
           checkBackupReminder();
       }, 5000);
 
+      const intervalSec = Math.max(15, settings.checkInterval || 60);
       const interval = setInterval(() => {
-          checkAppointments();
+          void checkAppointments();
           checkBackupReminder(); 
-      }, settings.checkInterval * 1000);
+      }, intervalSec * 1000);
 
       return () => {
           clearInterval(interval);
           clearTimeout(backupTimer);
       };
-  }, [checkAppointments, checkBackupReminder, settings.checkInterval]);
+  }, [enablePolling, checkAppointments, checkBackupReminder, settings.checkInterval]);
 
 
   const updateSettings = (newSettings: Partial<NotificationSettings>) => {
-      setSettings(prev => ({ ...prev, ...newSettings }));
+      setSettings(prev => {
+          const updated = { ...prev, ...newSettings };
+          settingsRef.current = updated;
+          try {
+              localStorage.setItem('notificationSettings', JSON.stringify(updated));
+              window.dispatchEvent(new CustomEvent('notification-settings-updated'));
+          } catch (e) {
+              console.error('Failed to save notificationSettings:', e);
+          }
+          return updated;
+      });
   };
 
   const testNotification = () => {

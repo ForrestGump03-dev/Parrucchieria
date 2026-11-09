@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { format, parse, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, startOfDay, endOfDay, isValid } from 'date-fns';
 import { it } from 'date-fns/locale';
+import toast from 'react-hot-toast';
 import {
   ArrowLeft,
   ArrowRight,
@@ -301,6 +302,11 @@ function AptSubRow({ apt, isRevealed = true }: { apt: ClientAppointmentDetail; i
 
 interface Props {
   range: DateRange;
+  onRangeChange?: (range: DateRange) => void;
+  customDates?: { start: string; end: string };
+  onCustomDatesChange?: (dates: { start: string; end: string }) => void;
+  showCustomPicker?: boolean;
+  onShowCustomPickerChange?: (show: boolean) => void;
   onClose: () => void;
   isRevealed?: boolean;
   onToggleReveal?: () => void;
@@ -309,6 +315,11 @@ interface Props {
 
 export default function ClientDetailView({
   range: initialRange,
+  onRangeChange,
+  customDates: controlledCustomDates,
+  onCustomDatesChange,
+  showCustomPicker: controlledShowCustomPicker,
+  onShowCustomPickerChange,
   onClose,
   isRevealed = true,
   onToggleReveal,
@@ -318,12 +329,33 @@ export default function ClientDetailView({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('spent');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [selectedRange, setSelectedRange] = useState<DateRange>(initialRange);
-  const [showCustomPicker, setShowCustomPicker] = useState(false);
-  const [customDates, setCustomDates] = useState({
+  const [internalRange, setInternalRange] = useState<DateRange>(initialRange);
+  const [internalShowCustomPicker, setInternalShowCustomPicker] = useState(
+    initialRange.label === 'Personalizzato'
+  );
+  const [internalCustomDates, setInternalCustomDates] = useState({
     start: format(initialRange.start, 'yyyy-MM-dd'),
     end: format(initialRange.end, 'yyyy-MM-dd'),
   });
+
+  const selectedRange = onRangeChange ? initialRange : internalRange;
+  const showCustomPicker = controlledShowCustomPicker ?? internalShowCustomPicker;
+  const customDates = controlledCustomDates ?? internalCustomDates;
+
+  const updateSelectedRange = (nextRange: DateRange) => {
+    setInternalRange(nextRange);
+    onRangeChange?.(nextRange);
+  };
+
+  const updateShowCustomPicker = (nextShow: boolean) => {
+    setInternalShowCustomPicker(nextShow);
+    onShowCustomPickerChange?.(nextShow);
+  };
+
+  const updateCustomDates = (nextDates: { start: string; end: string }) => {
+    setInternalCustomDates(nextDates);
+    onCustomDatesChange?.(nextDates);
+  };
 
   useEffect(() => {
     fetchDetailedReport(selectedRange);
@@ -332,8 +364,11 @@ export default function ClientDetailView({
   const handleRangeChange = (rangeType: string) => {
     const today = new Date();
     let newRange: DateRange;
-    if (rangeType === 'custom') { setShowCustomPicker(true); return; }
-    setShowCustomPicker(false);
+    if (rangeType === 'custom') {
+      updateShowCustomPicker(true);
+      return;
+    }
+    updateShowCustomPicker(false);
     switch (rangeType) {
       case 'today':     newRange = { start: startOfDay(today), end: endOfDay(today), label: 'Oggi' }; break;
       case 'week':      newRange = { start: startOfWeek(today, { weekStartsOn: 1 }), end: endOfWeek(today, { weekStartsOn: 1 }), label: 'Questa Settimana' }; break;
@@ -342,15 +377,30 @@ export default function ClientDetailView({
       case 'year':      newRange = { start: startOfYear(today), end: endOfYear(today), label: "Quest'Anno" }; break;
       default: return;
     }
-    setSelectedRange(newRange);
+    updateCustomDates({
+      start: format(newRange.start, 'yyyy-MM-dd'),
+      end: format(newRange.end, 'yyyy-MM-dd'),
+    });
+    updateSelectedRange(newRange);
     setExpandedIds(new Set());
   };
 
   const applyCustomRange = () => {
+    if (!customDates.start || !customDates.end) {
+      toast.error('Seleziona entrambe le date.');
+      return;
+    }
     const start = startOfDay(parse(customDates.start, 'yyyy-MM-dd', new Date()));
     const end = endOfDay(parse(customDates.end, 'yyyy-MM-dd', new Date()));
-    if (!isValid(start) || !isValid(end) || start > end) return;
-    setSelectedRange({ start, end, label: 'Personalizzato' });
+    if (!isValid(start) || !isValid(end)) {
+      toast.error('Date non valide.');
+      return;
+    }
+    if (start > end) {
+      toast.error('La data di inizio deve essere precedente alla data di fine.');
+      return;
+    }
+    updateSelectedRange({ start, end, label: 'Personalizzato' });
     setExpandedIds(new Set());
   };
 
@@ -500,25 +550,30 @@ export default function ClientDetailView({
               { id: 'lastMonth', label: 'Mese Scorso' },
               { id: 'year', label: 'Anno' },
               { id: 'custom', label: 'Personalizzato' },
-            ].map(period => (
-              <button
-                key={period.id}
-                onClick={() => handleRangeChange(period.id)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                  selectedRange.label === (
-                    period.id === 'lastMonth' ? 'Mese Scorso' :
-                    period.id === 'year' ? "Quest'Anno" :
-                    period.id === 'today' ? 'Oggi' :
-                    period.id === 'week' ? 'Questa Settimana' :
-                    period.id === 'custom' ? 'Personalizzato' : 'Questo Mese'
-                  )
-                    ? 'bg-indigo-100 text-indigo-700'
-                    : 'text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {period.label}
-              </button>
-            ))}
+            ].map(period => {
+              const targetLabel =
+                period.id === 'lastMonth' ? 'Mese Scorso' :
+                period.id === 'year' ? "Quest'Anno" :
+                period.id === 'today' ? 'Oggi' :
+                period.id === 'week' ? 'Questa Settimana' :
+                period.id === 'custom' ? 'Personalizzato' : 'Questo Mese';
+              const isSelected = period.id === 'custom'
+                ? (showCustomPicker || selectedRange.label === 'Personalizzato')
+                : (!showCustomPicker && selectedRange.label === targetLabel);
+              return (
+                <button
+                  key={period.id}
+                  onClick={() => handleRangeChange(period.id)}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                    isSelected
+                      ? 'bg-indigo-100 text-indigo-700'
+                      : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {period.label}
+                </button>
+              );
+            })}
           </div>
           {showCustomPicker && (
             <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm flex items-center gap-3 self-start">
@@ -527,7 +582,7 @@ export default function ClientDetailView({
                 <span className="text-sm text-slate-500">Dal:</span>
                 <input
                   type="date" value={customDates.start}
-                  onChange={e => setCustomDates(prev => ({ ...prev, start: e.target.value }))}
+                  onChange={e => updateCustomDates({ ...customDates, start: e.target.value })}
                   className="border border-slate-300 rounded px-2 py-1 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
               </div>
@@ -536,7 +591,7 @@ export default function ClientDetailView({
                 <span className="text-sm text-slate-500">Al:</span>
                 <input
                   type="date" value={customDates.end}
-                  onChange={e => setCustomDates(prev => ({ ...prev, end: e.target.value }))}
+                  onChange={e => updateCustomDates({ ...customDates, end: e.target.value })}
                   className="border border-slate-300 rounded px-2 py-1 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
               </div>

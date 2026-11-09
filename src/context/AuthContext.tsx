@@ -21,6 +21,17 @@ const AuthContext = createContext<AuthContextType>({
   updateUserPassword: async () => {},
 });
 
+function isSameUser(a: User | null, b: User | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.id === b.id &&
+    a.email === b.email &&
+    a.updated_at === b.updated_at &&
+    JSON.stringify(a.user_metadata ?? {}) === JSON.stringify(b.user_metadata ?? {})
+  );
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -37,13 +48,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     // Pulisci subito lo stato locale per feedback immediato
+    sessionRef.current = null;
     setSession(null);
     setUser(null);
+    setSubscription(null);
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     try {
       sessionStorage.removeItem('root_report_pin_reminder_shown');
+      sessionStorage.removeItem('root_report_pin_lockout');
+      localStorage.removeItem('app_notifications');
+      window.dispatchEvent(new CustomEvent('auth-signed-out'));
     } catch {
-      // Ignora errori se sessionStorage non è disponibile
+      // Ignora errori se storage non è disponibile
     }
     await supabase.auth.signOut();
   }, []);
@@ -57,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Check if session exists before logging out to avoid unnecessary attempts
       if (sessionRef.current) {
         console.log('Logging out due to inactivity');
-        signOut();
+        void signOut();
       }
     }, 60 * 60 * 1000);
   }, [signOut]);
@@ -84,9 +100,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       finishAuthLoading();
     };
 
-    // Gli eventi USER_UPDATED e TOKEN_REFRESHED contengono già una sessione valida.
-    // Evitare di richiamare altre API Auth in questi listener previene la rientranza
-    // sul lock di GoTrue e rende subito disponibile il nuovo metadata del PIN.
+    const applyAuthenticatedSession = (currentSession: Session) => {
+      sessionRef.current = currentSession;
+      setSession(currentSession);
+      setUser(prev => (isSameUser(prev, currentSession.user) ? prev : currentSession.user));
+      resetInactivityTimer();
+      finishAuthLoading();
+    };
+
+    // Gli eventi USER_UPDATED, TOKEN_REFRESHED e SIGNED_IN per lo stesso utente già
+    // verificato contengono già una sessione valida. Evitare di richiamare altre API
+    // Auth in questi listener previene la rientranza sul lock di GoTrue.
     const syncCurrentSession = (currentSession: Session | null) => {
       authStateVersion += 1;
 
@@ -95,11 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      sessionRef.current = currentSession;
-      setSession(currentSession);
-      setUser(currentSession.user);
-      resetInactivityTimer();
-      finishAuthLoading();
+      applyAuthenticatedSession(currentSession);
     };
 
     const checkAndSetSession = async (currentSession: Session | null) => {
@@ -112,6 +132,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      const wasAlreadyAuthenticatedSameUser =
+        sessionRef.current?.user?.id === currentSession.user.id;
+
       try {
         const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (!isActive || requestVersion !== authStateVersion) return;
@@ -121,34 +144,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data?.nextLevel === 'aal2' && data?.currentLevel !== 'aal2') {
           clearAuthState();
         } else {
-          sessionRef.current = currentSession;
-          setSession(currentSession);
-          setUser(currentSession.user);
-          resetInactivityTimer();
-          setSubscription(null);
-          // La sessione è già verificata: un eventuale ritardo sulla tabella
-          // subscriptions non deve bloccare l'intera app sulla schermata di loading.
-          finishAuthLoading();
-
-          // Fetch subscription data
-          const { data: subData, error: subError } = await supabase
-            .from('subscriptions')
-            .select('*')
-            .eq('user_id', currentSession.user.id)
-            .single();
-
-          if (isActive && requestVersion === authStateVersion && !subError && subData) {
-            setSubscription(subData);
-          }
+          applyAuthenticatedSession(currentSession);
         }
       } catch (err) {
         if (!isActive || requestVersion !== authStateVersion) return;
         console.error("Error checking AAL:", err);
-        // Fallback safe: force logout if we can't verify 2FA levels
+        if (wasAlreadyAuthenticatedSameUser) {
+          // Errore transitorio di rete o lock mentre l'utente era già autenticato:
+          // preserviamo la sessione senza forzare un logout distruttivo.
+          applyAuthenticatedSession(currentSession);
+          return;
+        }
+        // Fallback safe al primo login se non è possibile verificare il livello 2FA
         clearAuthState();
         return;
       }
-
     };
 
     // Se il browser non riesce a raggiungere Supabase (VPN, proxy o rete offline),
@@ -157,21 +167,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!isActive) return;
       authStateVersion += 1;
       console.error('Timeout durante il ripristino della sessione Auth');
-      clearAuthState();
+      if (!sessionRef.current) {
+        clearAuthState();
+      } else {
+        finishAuthLoading();
+      }
     }, 12000);
 
     // 1. Check active session on load
     void supabase.auth
       .getSession()
-      .then(({ data: { session } }) => checkAndSetSession(session))
+      .then(({ data: { session: initialSession } }) => checkAndSetSession(initialSession))
       .catch((err: unknown) => {
         console.error('Error restoring session:', err);
-        if (isActive) clearAuthState();
+        if (isActive && !sessionRef.current) clearAuthState();
       });
 
     // 2. Listen for changes (login, logout, auto-refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
-      if (event === 'SIGNED_OUT' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
+    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((event, currentSession) => {
+      if (
+        event === 'SIGNED_OUT' ||
+        event === 'USER_UPDATED' ||
+        event === 'TOKEN_REFRESHED' ||
+        (event === 'SIGNED_IN' &&
+          currentSession !== null &&
+          sessionRef.current?.user?.id === currentSession.user.id)
+      ) {
         syncCurrentSession(currentSession);
         return;
       }
@@ -179,13 +200,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setTimeout(() => {
         if (isActive) void checkAndSetSession(currentSession);
       }, 0);
-
     });
+
+    // 3. Quando la rete torna online (es. risveglio PC da standby), verifica che il token sia fresco
+    const handleOnline = () => {
+      const current = sessionRef.current;
+      if (!current) return;
+      const expiresAtMs = (current.expires_at ?? 0) * 1000;
+      if (expiresAtMs - Date.now() < 90_000) {
+        void supabase.auth.refreshSession().then(({ data }) => {
+          if (isActive && data.session) {
+            applyAuthenticatedSession(data.session);
+          }
+        }).catch((err: unknown) => {
+          console.warn('Refresh session on reconnect failed:', err);
+        });
+      }
+    };
+    window.addEventListener('online', handleOnline);
 
     return () => {
       isActive = false;
       authStateVersion += 1;
-      subscription.unsubscribe();
+      authSub.unsubscribe();
+      window.removeEventListener('online', handleOnline);
       if (authLoadingTimeout !== null) window.clearTimeout(authLoadingTimeout);
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     };

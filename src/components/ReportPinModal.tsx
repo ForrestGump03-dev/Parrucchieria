@@ -8,26 +8,75 @@ interface ReportPinModalProps {
   onSuccess: () => void;
 }
 
+const LOCKOUT_STORAGE_KEY = 'root_report_pin_lockout';
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 30_000;
+
+interface LockoutState {
+  attempts: number;
+  lockUntil: number;
+}
+
+function readLockoutState(): LockoutState {
+  try {
+    const raw = sessionStorage.getItem(LOCKOUT_STORAGE_KEY);
+    if (!raw) return { attempts: 0, lockUntil: 0 };
+    const parsed = JSON.parse(raw) as Partial<LockoutState>;
+    return {
+      attempts: Number(parsed.attempts) || 0,
+      lockUntil: Number(parsed.lockUntil) || 0,
+    };
+  } catch {
+    return { attempts: 0, lockUntil: 0 };
+  }
+}
+
+function writeLockoutState(state: LockoutState) {
+  try {
+    sessionStorage.setItem(LOCKOUT_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignora errori storage
+  }
+}
+
 export default function ReportPinModal({ isOpen, onClose, onSuccess }: ReportPinModalProps) {
   const { verifyPin } = useReportSecurity();
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [lockRemainingSec, setLockRemainingSec] = useState(0);
   const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    if (isOpen) {
-      setDigits(['', '', '', '', '', '']);
-      setError(null);
-      setVerifying(false);
-      // Focus primo input al mount
-      setTimeout(() => {
-        inputsRef.current[0]?.focus();
-      }, 50);
-    }
+    if (!isOpen) return;
+
+    setDigits(['', '', '', '', '', '']);
+    setError(null);
+    setVerifying(false);
+
+    const updateCountdown = () => {
+      const { lockUntil } = readLockoutState();
+      const remaining = Math.max(0, Math.ceil((lockUntil - Date.now()) / 1000));
+      setLockRemainingSec(remaining);
+    };
+
+    updateCountdown();
+    const interval = window.setInterval(updateCountdown, 1000);
+
+    // Focus primo input al mount
+    const focusTimer = window.setTimeout(() => {
+      inputsRef.current[0]?.focus();
+    }, 50);
+
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(focusTimer);
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const isLocked = lockRemainingSec > 0;
 
   const handleDigitChange = (index: number, value: string) => {
     // Solo caratteri numerici
@@ -88,6 +137,16 @@ export default function ReportPinModal({ isOpen, onClose, onSuccess }: ReportPin
 
   const handleSubmit = async (e?: FormEvent) => {
     if (e) e.preventDefault();
+    if (isLocked) return;
+
+    const currentLock = readLockoutState();
+    if (currentLock.lockUntil > Date.now()) {
+      const remaining = Math.ceil((currentLock.lockUntil - Date.now()) / 1000);
+      setLockRemainingSec(remaining);
+      setError(`Troppi tentativi errati. Riprova tra ${remaining} secondi.`);
+      return;
+    }
+
     if (fullPin.length !== 6) {
       setError('Inserisci tutte le 6 cifre del PIN');
       return;
@@ -99,10 +158,22 @@ export default function ReportPinModal({ isOpen, onClose, onSuccess }: ReportPin
     try {
       const isValid = await verifyPin(fullPin);
       if (isValid) {
+        writeLockoutState({ attempts: 0, lockUntil: 0 });
+        setLockRemainingSec(0);
         onSuccess();
         onClose();
       } else {
-        setError('PIN non corretto. Riprova.');
+        const nextAttempts = currentLock.attempts + 1;
+        if (nextAttempts >= MAX_FAILED_ATTEMPTS) {
+          const lockUntil = Date.now() + LOCKOUT_DURATION_MS;
+          writeLockoutState({ attempts: 0, lockUntil });
+          const remaining = Math.ceil(LOCKOUT_DURATION_MS / 1000);
+          setLockRemainingSec(remaining);
+          setError(`Troppi tentativi errati. Riprova tra ${remaining} secondi.`);
+        } else {
+          writeLockoutState({ attempts: nextAttempts, lockUntil: 0 });
+          setError(`PIN non corretto. Tentativi rimasti: ${MAX_FAILED_ATTEMPTS - nextAttempts}.`);
+        }
         setDigits(['', '', '', '', '', '']);
         inputsRef.current[0]?.focus();
       }
@@ -152,11 +223,12 @@ export default function ReportPinModal({ isOpen, onClose, onSuccess }: ReportPin
                   type="password"
                   inputMode="numeric"
                   maxLength={1}
+                  disabled={isLocked}
                   value={digit}
                   onChange={(e) => handleDigitChange(i, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(i, e)}
-                  className={`w-11 h-14 sm:w-12 sm:h-14 text-center text-2xl font-bold font-mono rounded-xl border transition-all outline-none ${
-                    error
+                  className={`w-11 h-14 sm:w-12 sm:h-14 text-center text-2xl font-bold font-mono rounded-xl border transition-all outline-none disabled:opacity-50 ${
+                    error || isLocked
                       ? 'border-red-400 bg-red-50 text-red-700 focus:ring-2 focus:ring-red-400'
                       : digit
                       ? 'border-indigo-600 bg-indigo-50/40 text-slate-800 focus:ring-2 focus:ring-indigo-500'
@@ -166,16 +238,20 @@ export default function ReportPinModal({ isOpen, onClose, onSuccess }: ReportPin
               ))}
             </div>
 
-            {error && (
+            {(error || isLocked) && (
               <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-red-600 animate-in fade-in">
                 <ShieldAlert size={14} />
-                <span>{error}</span>
+                <span>
+                  {isLocked
+                    ? `Troppi tentativi errati. Riprova tra ${lockRemainingSec}s.`
+                    : error}
+                </span>
               </div>
             )}
 
             <button
               type="submit"
-              disabled={verifying || fullPin.length !== 6}
+              disabled={verifying || isLocked || fullPin.length !== 6}
               className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 text-sm"
             >
               {verifying ? (
@@ -183,6 +259,8 @@ export default function ReportPinModal({ isOpen, onClose, onSuccess }: ReportPin
                   <Loader2 size={18} className="animate-spin" />
                   Verifica in corso...
                 </>
+              ) : isLocked ? (
+                `Bloccato (${lockRemainingSec}s)`
               ) : (
                 'Sblocca Dati'
               )}

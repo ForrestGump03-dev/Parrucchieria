@@ -17,11 +17,19 @@ export function createCsvString(rows: object[]): string | null {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const r = row as any;
       return keys.map(k => {
-        let cell = r[k] === null || r[k] === undefined ? '' : r[k];
+        const raw = r[k];
+        let cell = raw === null || raw === undefined ? '' : raw;
         cell = cell instanceof Date
           ? cell.toLocaleString()
-          : cell.toString().replace(/"/g, '""');
-        if (cell.search(/("|,|\n)/g) >= 0) {
+          : cell.toString();
+
+        // Prevenzione CSV Formula Injection (OWASP): neutralizza formule (=, @, tab, CR, o +/- non numerici)
+        if (/^([=@\t\r]|[+-][^\d\s])/.test(cell)) {
+          cell = `'${cell}`;
+        }
+
+        cell = cell.replace(/"/g, '""');
+        if (cell.search(/("|,|\n|\r)/g) >= 0) {
           cell = `"${cell}"`;
         }
         return cell;
@@ -51,6 +59,6 @@ export function exportToCsv(filename: string, rows: object[]) {
   
   // Cleanup
   document.body.removeChild(link);
-  // URL.revokeObjectURL(url); // Often safer to let GC handle it to avoid premature revocation issues in some envs
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   return true;
 }

@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { useState, useCallback, useRef } from 'react';
+import { supabase, ensureAuthenticatedSession } from '../lib/supabase';
 import { type Client } from '../types';
 import { useAuth } from '../context/AuthContext';
 
@@ -17,11 +17,15 @@ export function useClients() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const latestFetchRef = useRef(0);
 
   const fetchClients = useCallback(async (options?: FetchClientsOptions) => {
+    const fetchId = ++latestFetchRef.current;
     if (!user) return;
     try {
       setLoading(true);
+      setError(null);
+      await ensureAuthenticatedSession();
       
       const page = options?.page || 1;
       const limit = options?.limit || 15;
@@ -34,8 +38,16 @@ export function useClients() {
         .select('*', { count: 'exact' })
         .eq('is_active', true);
 
-      if (search) {
-        query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,phone.ilike.%${search}%,unique_code.ilike.%${search}%`);
+      const sanitizedSearch = search
+        .trim()
+        .replace(/[,()"'\\%_]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (sanitizedSearch) {
+        query = query.or(
+          `first_name.ilike.%${sanitizedSearch}%,last_name.ilike.%${sanitizedSearch}%,phone.ilike.%${sanitizedSearch}%,unique_code.ilike.%${sanitizedSearch}%`
+        );
       }
 
       if (activeTab === 'birthdays') {
@@ -56,14 +68,18 @@ export function useClients() {
 
       const { data, count, error: fetchErr } = await query;
       if (fetchErr) throw fetchErr;
+      if (fetchId !== latestFetchRef.current) return;
 
       setClients(data || []);
       setTotalCount(count || 0);
     } catch (err) {
+      if (fetchId !== latestFetchRef.current) return;
       console.error(err);
       setError('Errore caricamento clienti');
     } finally {
-      setLoading(false);
+      if (fetchId === latestFetchRef.current) {
+        setLoading(false);
+      }
     }
   }, [user]);
 

@@ -5,8 +5,8 @@ import { useCallback } from 'react';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Verifica credenziali admin senza creare istanze secondarie di GoTrueClient (evita warning in console)
-async function checkAdminPassword(email: string, password: string): Promise<boolean> {
+// Verifica credenziali admin senza creare istanze secondarie di GoTrueClient (evita warning in console e non altera la sessione AAL2)
+export async function checkAdminPassword(email: string, password: string): Promise<boolean> {
   try {
     const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
       method: 'POST',
@@ -91,6 +91,12 @@ export function useReportSecurity() {
         return { success: false, error: updateError.message || 'Errore durante il salvataggio del PIN' };
       }
 
+      try {
+        sessionStorage.removeItem('root_report_pin_lockout');
+      } catch {
+        // Ignora errori storage
+      }
+
       return { success: true };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Errore imprevisto';
@@ -128,6 +134,12 @@ export function useReportSecurity() {
 
       if (updateError) {
         return { success: false, error: updateError.message || 'Errore durante la rimozione del PIN' };
+      }
+
+      try {
+        sessionStorage.removeItem('root_report_pin_lockout');
+      } catch {
+        // Ignora errori storage
       }
 
       return { success: true };

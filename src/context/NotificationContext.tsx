@@ -14,11 +14,14 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
+const MAX_NOTIFICATIONS = 100;
+
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     try {
       const saved = localStorage.getItem('app_notifications');
-      return saved ? JSON.parse(saved) : [];
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, MAX_NOTIFICATIONS) : [];
     } catch (e) {
       console.error('Failed to parse notifications', e);
       return [];
@@ -28,8 +31,20 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   useEffect(() => {
-    localStorage.setItem('app_notifications', JSON.stringify(notifications));
+    try {
+      localStorage.setItem('app_notifications', JSON.stringify(notifications.slice(0, MAX_NOTIFICATIONS)));
+    } catch (e) {
+      console.error('Failed to persist notifications', e);
+    }
   }, [notifications]);
+
+  useEffect(() => {
+    const handleSignedOut = () => {
+      setNotifications([]);
+    };
+    window.addEventListener('auth-signed-out', handleSignedOut);
+    return () => window.removeEventListener('auth-signed-out', handleSignedOut);
+  }, []);
 
   const addNotification = (notification: Omit<AppNotification, 'id' | 'read' | 'timestamp'>) => {
     const newNotification: AppNotification = {
@@ -39,8 +54,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       timestamp: Date.now(),
     };
     
-    // Add to top of list
-    setNotifications(prev => [newNotification, ...prev]);
+    // Add to top of list and cap at MAX_NOTIFICATIONS
+    setNotifications(prev => [newNotification, ...prev].slice(0, MAX_NOTIFICATIONS));
   };
 
   const markAsRead = (id: string) => {

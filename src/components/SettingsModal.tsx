@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useReminders } from '../hooks/useReminders';
-import { useReportSecurity } from '../hooks/useReportSecurity';
+import { useReportSecurity, checkAdminPassword } from '../hooks/useReportSecurity';
 import QRCode from 'react-qr-code';
 
 interface SettingsModalProps {
@@ -148,13 +148,9 @@ export default function SettingsModal({ isOpen, onClose, initialTab = 'security'
     if (!factorId || !data.currentPassword) return;
     setLoading2FA(true);
     try {
-      // First, re-authenticate to verify the password before disabling 2FA
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: session?.user?.email || '',
-        password: data.currentPassword
-      });
-
-      if (signInError) throw new Error('Password errata');
+      // Verifica la password admin tramite fetch diretto senza sovrascrivere la sessione AAL2 attiva
+      const isValid = await checkAdminPassword(session?.user?.email || '', data.currentPassword);
+      if (!isValid) throw new Error('Password errata');
 
       const { error: unenrollError } = await supabase.auth.mfa.unenroll({ factorId });
       if (unenrollError) throw unenrollError;
@@ -393,7 +389,11 @@ export default function SettingsModal({ isOpen, onClose, initialTab = 'security'
                     
                     {qrCode && (
                        <div className="bg-white p-4 rounded-xl border border-slate-200 inline-block">
-                         <div dangerouslySetInnerHTML={{ __html: qrCode }} className="w-40 h-40" />
+                         <img
+                           src={qrCode.startsWith('data:') ? qrCode : `data:image/svg+xml;utf8,${encodeURIComponent(qrCode)}`}
+                           alt="QR Code 2FA"
+                           className="w-40 h-40 object-contain"
+                         />
                        </div>
                     )}
 

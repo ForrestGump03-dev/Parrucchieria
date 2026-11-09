@@ -16,7 +16,15 @@ interface ClientListProps {
 
 export default function ClientList({ onSelect, selectedClientId, onClientDeleted, refreshTrigger }: ClientListProps) {
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const { clients, totalCount, loading, fetchClients, deleteClient } = useClients();
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -38,7 +46,7 @@ export default function ClientList({ onSelect, selectedClientId, onClientDeleted
         try {
           await deleteClient(id);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-          fetchClients({ page: currentPage, limit: itemsPerPage, search, sortOrder, activeTab: activeTab === 'birthdays' ? 'birthdays' : 'all' });
+          fetchClients({ page: currentPage, limit: itemsPerPage, search: debouncedSearch, sortOrder, activeTab: activeTab === 'birthdays' ? 'birthdays' : 'all' });
           if (onClientDeleted) onClientDeleted();
           toast.success("Cliente eliminato con successo");
         } catch {
@@ -48,7 +56,7 @@ export default function ClientList({ onSelect, selectedClientId, onClientDeleted
     });
   };
 
-  const { settings } = useReminders();
+  const { settings } = useReminders({ enablePolling: false });
   const { candidates, loading: winbackLoading } = useWinback(settings.winbackDays || 60);
   const [activeTab, setActiveTab] = useState<'all' | 'winback' | 'birthdays'>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -60,19 +68,30 @@ export default function ClientList({ onSelect, selectedClientId, onClientDeleted
       fetchClients({
         page: currentPage,
         limit: itemsPerPage,
-        search,
+        search: debouncedSearch,
         sortOrder,
         activeTab: activeTab === 'birthdays' ? 'birthdays' : 'all'
       });
     }
-  }, [fetchClients, currentPage, itemsPerPage, search, sortOrder, activeTab, refreshTrigger]);
+  }, [fetchClients, currentPage, itemsPerPage, debouncedSearch, sortOrder, activeTab, refreshTrigger]);
+
+  const filteredCandidates = search.trim()
+    ? candidates.filter(c => {
+        const q = search.trim().toLowerCase();
+        return (
+          `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase().includes(q) ||
+          (c.phone || '').toLowerCase().includes(q) ||
+          (c.unique_code || '').toLowerCase().includes(q)
+        );
+      })
+    : candidates;
 
   const totalPages = activeTab === 'winback' 
-    ? Math.ceil(candidates.length / itemsPerPage) 
+    ? Math.ceil(filteredCandidates.length / itemsPerPage) 
     : Math.ceil((totalCount || 0) / itemsPerPage);
 
   const currentItems = activeTab === 'winback'
-    ? candidates.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+    ? filteredCandidates.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
     : clients;
 
   const isLoading = activeTab === 'winback' ? winbackLoading : loading;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer, Views, type View } from 'react-big-calendar';
 import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
 import { format, parse, startOfWeek, getDay, addMinutes, isValid } from 'date-fns';
@@ -48,7 +48,8 @@ const localizer = dateFnsLocalizer({
 const DnDCalendar = withDragAndDrop<CalendarEvent, Resource>(Calendar);
 
 const parseDateTime = (dateStr: string, timeStr: string) => {
-  return parse(`${dateStr} ${timeStr}`, 'yyyy-MM-dd HH:mm', new Date());
+  const normalizedTime = (timeStr || '00:00').slice(0, 5);
+  return parse(`${dateStr} ${normalizedTime}`, 'yyyy-MM-dd HH:mm', new Date());
 };
 
 export default function Agenda() {
@@ -57,6 +58,7 @@ export default function Agenda() {
   const { staff, refreshStaff } = useStaff();
   const { user } = useAuth();
   const latestFetchRef = useRef(0);
+  const retryTimeoutRef = useRef<number | null>(null);
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [view, setView] = useState<View>(Views.DAY);
@@ -86,28 +88,36 @@ export default function Agenda() {
     clientName: string;
   }>({ isVisible: false, clientId: '', clientName: '' });
 
-  // Prepare Resources
-  const resources = staff.length > 0 
-     ? [
-         ...staff.filter(s => s.active).map(s => ({ id: s.id, title: s.name })), 
-       ]
-     : undefined;
-  
-  // If resources exist, we always add 'Unassigned' column if there are unassigned events?
-  // User wants Columns. If only 3 hairdressers, show 3 columns.
-  // If undefined, show Standard View.
-  if (resources && staff.length < 5) {
-      // Add empty columns? No, react-big-calendar doesn't do "empty" resources easily without dummy logic.
-  }
-  // Force "Non Assegnato" if we are using columns
-  if (resources) {
-      resources.push({ id: 'unassigned', title: 'Non Assegnato' });
-  }
+  // Prepare Resources (solo se c'è almeno un membro dello staff attivo)
+  const resources = useMemo<Resource[] | undefined>(() => {
+    const active = staff.filter(s => s.active);
+    if (active.length === 0) return undefined;
+    return [
+      ...active.map(s => ({ id: s.id, title: s.name })),
+      { id: 'unassigned', title: 'Non Assegnato' },
+    ];
+  }, [staff]);
+
+  // Se un appuntamento appartiene a un collaboratore disattivato/rimosso, mostralo in "Non Assegnato"
+  // invece di farlo sparire dalla vista giornaliera a colonne di react-big-calendar.
+  const displayedEvents = useMemo<CalendarEvent[]>(() => {
+    if (!resources) return events;
+    const validIds = new Set(resources.map(r => r.id));
+    return events.map(evt =>
+      evt.resourceId && validIds.has(evt.resourceId)
+        ? evt
+        : { ...evt, resourceId: 'unassigned' }
+    );
+  }, [events, resources]);
 
   const [clusterData, setClusterData] = useState<{ isOpen: boolean; events: CalendarEvent[] }>({ isOpen: false, events: [] });
 
-  const fetchEvents = useCallback(async () => {
+  const fetchEvents = useCallback(async (retryCount = 0) => {
     const fetchId = ++latestFetchRef.current;
+    if (retryTimeoutRef.current !== null) {
+      window.clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
     if (!user) return;
 
     // Calcola il range in base alla vista
@@ -129,7 +139,6 @@ export default function Agenda() {
       // del token. Solo l'ultima risposta può aggiornare l'agenda.
       if (fetchId !== latestFetchRef.current) return;
       
-      // Even if data is empty, we must continue to clear events
       const safeData = data || [];
 
       const calendarEvents: CalendarEvent[] = [];
@@ -161,31 +170,67 @@ export default function Agenda() {
       setEvents(calendarEvents);
     } catch (e) {
       if (fetchId !== latestFetchRef.current) return;
-      console.error(e);
-      toast.error('Impossibile aggiornare agenda');
+      console.error('Errore recupero appuntamenti agenda:', e);
+      // Ritenta silenziosamente fino a 2 volte (es. riconnessione Wi-Fi al risveglio dallo standby)
+      // mantenendo intatti gli appuntamenti già visibili a schermo.
+      if (retryCount < 2) {
+        retryTimeoutRef.current = window.setTimeout(() => {
+          void fetchEvents(retryCount + 1);
+        }, (retryCount + 1) * 2000);
+      } else {
+        toast.error('Impossibile aggiornare agenda');
+      }
     } finally {
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     }
   }, [date, getAppointmentsForRange, user]);
 
-  // Handle focus re-fetch and initial load
+  // Handle focus/visibility/online re-fetch and initial load
   useEffect(() => {
     void fetchEvents();
     
-    // Auto-refresh when window regains focus (solves "minimize/restore" issue)
-    const onFocus = () => {
-       void fetchEvents();
-       void refreshStaff();
+    let debounceTimer: number | null = null;
+    const scheduleRefresh = () => {
+      if (debounceTimer !== null) {
+        window.clearTimeout(debounceTimer);
+      }
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        void fetchEvents();
+        void refreshStaff();
+      }, 250);
     };
+
+    const onFocus = () => {
+      scheduleRefresh();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        scheduleRefresh();
+      }
+    };
+    const onOnline = () => {
+      scheduleRefresh();
+    };
+
     window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     
     const handleClick = () => setContextMenu(null);
     window.addEventListener('click', handleClick);
     
     return () => {
-       latestFetchRef.current += 1;
-       window.removeEventListener('click', handleClick);
-       window.removeEventListener('focus', onFocus);
+      latestFetchRef.current += 1;
+      if (debounceTimer !== null) window.clearTimeout(debounceTimer);
+      if (retryTimeoutRef.current !== null) {
+        window.clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+      window.removeEventListener('click', handleClick);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [fetchEvents, refreshStaff]);
 
@@ -374,7 +419,7 @@ export default function Agenda() {
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 relative z-0">
         <DnDCalendar
           localizer={localizer}
-          events={events}
+          events={displayedEvents}
           resources={resources}
           resourceIdAccessor={(r) => r.id}
           resourceTitleAccessor={(r) => r.title}

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { format } from 'date-fns';
-import { supabase } from '../lib/supabase';
+import { supabase, ensureAuthenticatedSession } from '../lib/supabase';
 import { type Appointment, type NewAppointment } from '../types';
 import { useAuth } from '../context/AuthContext';
 
@@ -13,6 +13,7 @@ export function useAppointments() {
 
     try {
       setLoading(true);
+      await ensureAuthenticatedSession();
       const { data, error } = await supabase
         .from('appointments')
         .insert([{
@@ -30,34 +31,77 @@ export function useAppointments() {
   }, [user]);
 
   const getClientHistory = useCallback(async (clientId: string) => {
-    
-    const { data, error } = await supabase
-      .from('appointments')
-      .select('*')
-      .eq('client_id', clientId)
-      .not('price', 'is', null) 
-      .order('date', { ascending: false });
+    await ensureAuthenticatedSession();
 
-    if (error) throw error;
-    return data as Appointment[];
+    const pageSize = 1000;
+    let page = 0;
+    let hasMore = true;
+    let allHistory: Appointment[] = [];
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('client_id', clientId)
+        .not('price', 'is', null) 
+        .order('date', { ascending: false })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+
+      if (error) throw error;
+      if (data && data.length > 0) {
+        allHistory = allHistory.concat(data as Appointment[]);
+        if (data.length < pageSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return allHistory;
   }, []);
 
   const getAppointmentsForRange = useCallback(async (start: Date, end: Date) => {
-     const startStr = format(start, 'yyyy-MM-dd');
-     const endStr = format(end, 'yyyy-MM-dd');
+    await ensureAuthenticatedSession();
 
-     const { data, error } = await supabase
-      .from('appointments')
-      .select('*, clients(*)') // Join with clients to show name in calendar
-      .is('price', null)
-      .gte('date', startStr)
-      .lte('date', endStr);
-      
-    if (error) throw error;
-    return data as Appointment[];
+    const startStr = format(start, 'yyyy-MM-dd');
+    const endStr = format(end, 'yyyy-MM-dd');
+
+    const pageSize = 1000;
+    let page = 0;
+    let hasMore = true;
+    let allAppointments: Appointment[] = [];
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*, clients(*)') // Join with clients to show name in calendar
+        .is('price', null)
+        .gte('date', startStr)
+        .lte('date', endStr)
+        .order('date', { ascending: true })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+        
+      if (error) throw error;
+      if (data && data.length > 0) {
+        allAppointments = allAppointments.concat(data as Appointment[]);
+        if (data.length < pageSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return allAppointments;
   }, []);
 
   const deleteAppointment = useCallback(async (id: string) => {
+    await ensureAuthenticatedSession();
     const { error } = await supabase
       .from('appointments')
       .delete()
@@ -67,6 +111,7 @@ export function useAppointments() {
   }, []);
 
   const updateAppointment = useCallback(async (id: string, updates: Partial<NewAppointment>) => {
+    await ensureAuthenticatedSession();
     const { error } = await supabase
       .from('appointments')
       .update(updates)
@@ -76,6 +121,7 @@ export function useAppointments() {
   }, []);
 
   const getLastPriceForTreatment = useCallback(async (treatment: string) => {
+    await ensureAuthenticatedSession();
     const { data, error } = await supabase
       .from('appointments')
       .select('price')
@@ -93,6 +139,7 @@ export function useAppointments() {
   }, []);
 
   const getClientAppointmentsByTime = useCallback(async (clientId: string, date: string, time: string) => {
+    await ensureAuthenticatedSession();
     const { data, error } = await supabase
       .from('appointments')
       .select('*')
