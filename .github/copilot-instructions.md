@@ -235,16 +235,17 @@ export interface Subscription {
 
 | Context | File | Espone | Hook di accesso |
 |---------|------|--------|-----------------|
-| `AuthContext` | `src/context/AuthContext.tsx` | `user`, `session`, `loading`, `signOut()`, `updateUserPassword()`. Gestisce auto-logout inattività (60 m). Gestisce AAL2 MFA TOTP. | `useAuth()` |
+| `AuthContext` | `src/context/AuthContext.tsx` | `user`, `session`, `loading`, `signOut()`, `updateUserPassword()`. Gestisce auto-logout inattività (60 m), stabilizzazione del riferimento `user` (`isSameUser`), refresh proattivo token su evento `online` e verifica AAL2 MFA TOTP resiliente ad errori di rete. | `useAuth()` |
 | `NotificationContext` | `src/context/NotificationContext.tsx` | `notifications[]`, `unreadCount`, `addNotification()`, `markAsRead()`, `markAllAsRead()`, `removeNotification()`, `clearAll()` | `useNotifications()` |
 | `StaffContext` | `src/context/StaffContext.tsx` | `staff[]`, `loading`, `addStaff()`, `updateStaff()`, `deleteStaff()`, `refreshStaff()` | `useStaff()` (re-export da `src/hooks/useStaff.ts`) |
 | `TreatmentContext` | `src/context/TreatmentContext.tsx` | `treatments[]`, `loading`, `fetchTreatments()`, `addTreatment()`, `updateTreatment()`, `deleteTreatment()`, `seedDefaults()` | `useTreatments()` (re-export da `src/hooks/useTreatments.ts`) |
 
 ### Note sui Context
 
-- **NotificationContext**: persiste in `localStorage` (`'app_notifications'`). Lo stato viene ricaricato al mount.
-- **StaffContext**: ri-fetcha i dati quando la finestra del browser torna in focus (`window.addEventListener('focus', ...)`).
-- **TreatmentContext**: `addTreatment` lancia errore con messaggio localizzato se il nome è duplicato (codice Supabase `23505`). `seedDefaults()` carica i trattamenti predefiniti da `src/constants/treatments.ts`.
+- **AuthContext**: mantiene stabile il riferimento dell'oggetto `user` tramite `isSameUser(a, b)` durante `TOKEN_REFRESHED`, `USER_UPDATED` e `SIGNED_IN` per l'utente già autenticato (evitando re-render e tempeste di re-fetch negli hook dipendenti da `user`). Ascolta `window.addEventListener('online', ...)` per forzare il refresh del token dopo standby/sleep del PC. Al `signOut()` ripulisce `sessionStorage` (`root_report_pin_reminder_shown`, `root_report_pin_lockout`), `localStorage` (`app_notifications`) ed emette l'evento globale `'auth-signed-out'`.
+- **NotificationContext**: persiste in `localStorage` (`'app_notifications'`) con lettura protetta da `try/catch` e limite massimo `MAX_NOTIFICATIONS = 100`. Si azzera automaticamente sull'evento `'auth-signed-out'`.
+- **StaffContext**: invoca `ensureAuthenticatedSession()` prima del fetch e preserva lo stato `staff` esistente in caso di errore di rete transitorio. Il refresh su ritorno in focus/visibilità/online è coordinato e debounced (250ms) da `Agenda.tsx`.
+- **TreatmentContext**: invoca `ensureAuthenticatedSession()` prima del fetch; `addTreatment` lancia errore con messaggio localizzato se il nome è duplicato (codice Supabase `23505`). `seedDefaults()` carica i trattamenti predefiniti da `src/constants/treatments.ts`.
 
 ---
 
@@ -257,8 +258,8 @@ Logica Supabase per gli appuntamenti. Non mantiene stato locale — ogni metodo 
 | Metodo | Firma | Descrizione |
 |--------|-------|-------------|
 | `addAppointment` | `(appointment: NewAppointment) => Promise<Appointment>` | INSERT con `user_id: user.id`. Lancia errore se non autenticato. |
-| `getClientHistory` | `(clientId: string) => Promise<Appointment[]>` | SELECT con condizione esatta `.not('price', 'is', null)` e ordinamento data DESC. |
-| `getAppointmentsForRange` | `(start: Date, end: Date) => Promise<Appointment[]>` | Pre-formatta date (yyyy-MM-dd) tramite `date-fns`. SELECT con join `clients(*)` combinato con `.is('price', null)` (previene bug dei mille record e filtri data errati). |
+| `getClientHistory` | `(clientId: string) => Promise<Appointment[]>` | Invoca `ensureAuthenticatedSession()`, poi esegue SELECT paginata (`.range()` a blocchi di 1000) con condizione `.not('price', 'is', null)` e ordinamento `date` DESC, `start_time` DESC. |
+| `getAppointmentsForRange` | `(start: Date, end: Date) => Promise<Appointment[]>` | Invoca `ensureAuthenticatedSession()`, pre-formatta date (`yyyy-MM-dd`) tramite `date-fns` ed esegue SELECT paginata (`.range()` a blocchi di 1000) con join `clients(*)` combinato con `.is('price', null)` e ordinamento deterministico (`date`, `start_time`, `id`). |
 | `deleteAppointment` | `(id: string) => Promise<void>` | DELETE per id. |
 | `updateAppointment` | `(id: string, updates: Partial<NewAppointment>) => Promise<void>` | UPDATE campi parziali. |
 | `getLastPriceForTreatment` | `(treatment: string) => Promise<number \| null>` | Recupera l'ultimo prezzo usato per un trattamento (price > 0, DESC created_at). Usato per pre-compilare il form. |
@@ -279,7 +280,7 @@ Mantiene stato locale `clients[]` sincronizzato con Supabase.
 | `totalCount` | `number` | Numero totale esatto dei clienti attivi, utile per la UI di paginazione. |
 | `loading` | `boolean` | Stato caricamento iniziale o durante il fetch della pagina. |
 | `error` | `string \| null` | Messaggio errore fetch. |
-| `fetchClients(options)` | `Promise<void>` | Ri-fetcha da Supabase filtrando per `is_active = true`. Accetta opzioni `{ page, limit, search, sortOrder, activeTab }`. La `search` supporta query su nome, cognome, telefono o **`unique_code`**. Tab `birthdays` sfrutta `birth_month`. |
+| `fetchClients(options)` | `Promise<void>` | Invoca `ensureAuthenticatedSession()`, protegge da race condition tramite `latestFetchRef` e ri-fetcha da Supabase filtrando per `is_active = true`. Accetta opzioni `{ page, limit, search, sortOrder, activeTab }`. La `search` sanitizza i caratteri speciali PostgREST (`,().%*"'\\`) prima di costruire il filtro `.or()` su nome, cognome, telefono o **`unique_code`**. Tab `birthdays` sfrutta `birth_month`. |
 | `addClient(client)` | `Promise<Client>` | INSERT con `user_id: user.id`. Aggiorna stato locale ottimisticamente. |
 | `updateClient(id, updates)` | `Promise<Client>` | UPDATE + aggiorna stato locale. |
 | `deleteClient(id)` | `Promise<void>` | *Soft delete*: Imposta `is_active` a false. Verifica autenticazione come `addClient`. |
@@ -296,7 +297,7 @@ Mantiene stato locale `products[]`.
 |---------------|------|-------------|
 | `products` | `Product[]` | Lista prodotti ordinata per `name`. |
 | `loading` | `boolean` | |
-| `fetchProducts()` | `Promise<void>` | Ri-fetcha da Supabase. |
+| `fetchProducts()` | `Promise<void>` | Invoca `ensureAuthenticatedSession()` e ri-fetcha da Supabase. |
 | `addProduct(product)` | `Promise<Product \| undefined>` | INSERT con `user_id: user.id`. Toast successo/errore automatici. |
 | `updateProduct(id, updates)` | `Promise<void>` | UPDATE + aggiorna stato locale. Toast automatici. |
 | `deleteProduct(id)` | `Promise<void>` | DELETE + filtra stato locale. Toast automatici. |
@@ -334,7 +335,7 @@ type DateRange = { start: Date; end: Date; label: string };
 |---------------|------|-------------|
 | `stats` | `KPIStats \| null` | Null finché non si chiama `fetchStats`. |
 | `loading` | `boolean` | |
-| `fetchStats(customRange?)` | `Promise<void>` | Default: mese corrente. Calcola periodo precedente per confronto (stesso delta giorni). Fetcha solo appuntamenti con `price != null`. |
+| `fetchStats(customRange?)` | `Promise<void>` | Default: mese corrente. Invoca `ensureAuthenticatedSession()`, usa `latestFetchRef` contro race condition al cambio rapido del filtro, normalizza gli estremi con `startOfDay`/`endOfDay` e calcola il periodo precedente in modo DST-safe tramite `differenceInCalendarDays` + `addDays`. Se non esistono appuntamenti pagati, imposta comunque uno stato `KPIStats` a zero anziché lasciare `stats = null`. |
 
 ---
 
@@ -392,18 +393,18 @@ interface DetailedReportData {
 |---------------|------|-------------|
 | `data` | `DetailedReportData \| null` | Null finché non si chiama `fetchDetailedReport`. |
 | `loading` | `boolean` | |
-| `fetchDetailedReport(range)` | `Promise<void>` | Fetcha TUTTI gli appuntamenti pagati (`price IS NOT NULL`), filtra nel range, raggruppa per cliente. Determina `isNewClient` confrontando con visite precedenti al range. |
+| `fetchDetailedReport(range)` | `Promise<void>` | Invoca `ensureAuthenticatedSession()`, protegge da race condition con `latestFetchRef`, fetcha TUTTI gli appuntamenti pagati (`price IS NOT NULL`) con paginazione `.range()`, filtra nel range normalizzato (`startOfDay`/`endOfDay`) e raggruppa per cliente. Se non ci sono record pagati, imposta `{ clients: [], summary: { ...0 } }`. |
 
 **Note**:
-- Usa `supabase` direttamente (non tramite hook), come eccezione documentata.
+- Usa `supabase` direttamente dentro l'hook con paginazione `.range()` e `ensureAuthenticatedSession()`.
 - `isNewClient`: un cliente è considerato nuovo se non ha NESSUNA visita (pagata) anteriore a `range.start`.
-- I typi sono riesportati da `useDetailedReport` e usati da `ClientDetailView`.
+- I tipi sono riesportati da `useDetailedReport` e usati da `ClientDetailView`.
 
 ---
 
 ### `useReminders` (`src/hooks/useReminders.ts`)
 
-Gestisce notifiche automatiche per appuntamenti imminenti e reminder backup.
+Gestisce notifiche automatiche per appuntamenti imminenti e reminder backup. Accetta `options?: { enablePolling?: boolean }` (default `true`).
 
 ```typescript
 interface NotificationSettings {
@@ -413,11 +414,12 @@ interface NotificationSettings {
   checkInterval: number;     // Secondi, default: 60
   backupReminderEnabled: boolean;
   backupIntervalDays: number; // Default: 14 (Smart Snooze)
+  winbackDays: number;        // Default: 60 (Soglia giorni recupero clienti)
 }
 ```
 
-- Impostazioni persistite in `localStorage` (`'notificationSettings'`).
-- Usa `settingsRef` + `notifiedIdsRef` per accedere allo stato aggiornato dentro `setInterval`.
+- Impostazioni persistite in `localStorage` (`'notificationSettings'`) con parsing JSON protetto da `try/catch` e sincronizzazione cross-component tramite CustomEvent `'notification-settings-updated'`.
+- Condivide a livello modulo il `Set` `notifiedAppointmentIds` (svuotato all'evento `'auth-signed-out'`) per evitare notifiche duplicate anche se l'hook viene rimontato; quando invocato solo per leggere le impostazioni (es. in `ClientList.tsx`), viene passato `{ enablePolling: false }` per non avviare timer ridondanti.
 - `sendNotification(title, body, type)`: invia sia a `NotificationContext` (centro notifiche) che a `react-hot-toast`.
 - Espone `settings` e `updateSettings()`.
 
@@ -442,11 +444,21 @@ Identifica candidati al "winback" — clienti la cui ultima visita risale a più
 | `refetch` | `() => Promise<void>` | Ri-fetcha i candidati. |
 
 **Logica**:
-- Fetcha tutti gli appuntamenti (`client_id`, `date`), raggruppa per cliente e trova la data più recente.
-- Filtra i clienti la cui ultima visita è ≥ `daysThreshold` giorni fa (default: 60).
-- Fetcha i dettagli dei clienti corrispondenti. Filtra solo clienti attivi (`is_active = true`).
+- Invoca `ensureAuthenticatedSession()` e protegge da race condition con `latestFetchRef`.
+- Fetcha tutti gli appuntamenti (`client_id`, `date`) tramite ciclo paginato `.range()` (blocchi da 1000), raggruppa per cliente e trova la data più recente.
+- Filtra i clienti la cui ultima visita è ≥ `daysThreshold` giorni di calendario fa (`differenceInCalendarDays`, default: 60).
+- Fetcha i dettagli dei clienti corrispondenti suddividendo `.in('id', chunk)` in blocchi da 200 ID per evitare URL PostgREST troppo lunghi. Filtra solo clienti attivi (`is_active = true`).
 - `WinbackCandidate` estende `Client` con `last_visit: string` e `days_since: number`.
 - Usato nel tab "Recupero" di `ClientList`.
+
+---
+
+### `useReportSecurity` (`src/hooks/useReportSecurity.ts`)
+
+Gestisce la sicurezza del fatturato in `Reports` tramite PIN a 6 cifre (hash SHA-256 con salt nei `user_metadata` di Supabase Auth) e verifica stateless della password amministratore.
+
+- `checkAdminPassword(email, password)`: funzione esportata che verifica la password admin tramite `fetch` diretto a `${supabaseUrl}/auth/v1/token?grant_type=password` senza intaccare la sessione attiva né il livello AAL2 sul client principale.
+- `useReportSecurity()`: espone `hasPin`, `skipPinSetup`, `verifyPin(pin)`, `setupPin(newPin, adminPassword?)`, `removePin(adminPassword)`, `setSkipSetup(skip)` e `triggerOpenSettings()`.
 
 ---
 
@@ -502,23 +514,31 @@ Form principale in Clienti & Cassa. Gestisce registrazione appuntamenti e checko
 
 ### `ClientDetailView` (`src/components/ClientDetailView.tsx`)
 
-Vista full-screen del registro dettagliato clienti. Rimpiazza il render di `Reports.tsx` quando attivata.
+Vista full-screen del registro dettagliato clienti. Rimpiazza il render principale di `Reports.tsx` quando attivata, mantenendo sincronizzato lo stato del periodo e della protezione PIN con `Reports.tsx`.
 
 **Props**:
 | Prop | Tipo | Obbligatoria | Descrizione |
 |------|------|-------------|-------------|
-| `range` | `DateRange` | Sì | Range iniziale passato da `Reports`. Rinominato `initialRange` internamente. |
+| `range` | `DateRange` | Sì | Range attivo sincronizzato con `Reports` (`selectedRange`). |
+| `onRangeChange` | `(range: DateRange) => void` | Sì | Aggiorna `selectedRange` nel parent `Reports`. |
+| `customDates` | `{ start: string; end: string }` | Sì | Estremi `yyyy-MM-dd` del filtro `Personalizzato`, condivisi con `Reports`. |
+| `onCustomDatesChange` | `(dates: { start: string; end: string }) => void` | Sì | Aggiorna `customDates` nel parent `Reports`. |
+| `showCustomPicker` | `boolean` | Sì | Stato visibilità selettore date personalizzate condiviso con `Reports`. |
+| `onShowCustomPickerChange` | `(show: boolean) => void` | Sì | Aggiorna `showCustomPicker` nel parent `Reports`. |
 | `onClose` | `() => void` | Sì | Torna alla vista `Reports`. |
+| `isRevealed` | `boolean` | Sì | Indica se il fatturato è attualmente sbloccato/visibile. |
+| `onToggleReveal` | `() => void` | Sì | Mostra/nasconde il fatturato o apre `ReportPinModal` / `ReportPinSetupModal` montati in `Reports.tsx`. |
+| `onRequestUnlock` | `(action: () => void) => void` | Sì | Richiede lo sblocco tramite PIN prima di eseguire un'azione sensibile (es. export CSV). |
 
 **Comportamento**:
-- Ha un proprio selettore di periodo (Oggi/Settimana/Mese/Mese Scorso/Anno/Personalizzato) con stato `selectedRange` locale.
+- Condivide il selettore di periodo (Oggi/Settimana/Mese/Mese Scorso/Anno/Personalizzato) e le date custom (`customDates`, `showCustomPicker`) direttamente con `Reports.tsx`, evitando disallineamenti quando si passa tra Report e Registro Dettagliato.
 - Usa `useDetailedReport` per fetching e aggregazione dati.
 - Tabella clienti ordinabile per `spent`, `name`, `visits`, `lastVisit` (`SortKey`).
 - Ogni riga è espandibile (`ClientRow`): mostra sub-tabella con tutti gli appuntamenti del cliente nel periodo.
 - Badge `RankBadge` per top 1/2/3 per spesa. Badge "Nuovo" per `isNewClient`.
 - Avatar colorato deterministicamente (`getAvatarColor`) con le prime 2 iniziali del nome.
 - Barra relativa di spesa per ogni cliente (rapporto con il massimo del periodo).
-- Export CSV dei dati aggregati per cliente via `exportToCsv()`.
+- Export CSV dei dati aggregati per cliente via `exportToCsv()` (protetto da `onRequestUnlock` se il fatturato è nascosto).
 - **Colonne tabella**: Nome/Telefono, Badge, Visite, Trattamenti (top 3 pills), € Prodotti, Totale + media, Ultima Visita + staff, Espansione.
 - **Sub-tabella espansa**: Data, Ora, Trattamento, Prodotti venduti, Staff, Note, € Serv., € Prod., Totale.
 
@@ -534,10 +554,12 @@ Modale conferma operazioni distruttive. Sostituisce `window.confirm()`.
 
 ### `ClientList` (`src/components/ClientList.tsx`)
 
-Sidebar lista clienti con ricerca (nome, cognome, telefono), filtri (Compleanni del mese) e **Paginazione**.
+Sidebar lista clienti con ricerca (nome, cognome, telefono, `unique_code`), filtri (Compleanni del mese, Recupero/Winback) e **Paginazione**.
 
 **Feature:**
 - Usa paginazione **server-side** passando i parametri al backend per limitare i re-render e risparmiare memoria, a chunk di 15.
+- Debounce di 250ms sulla ricerca (`debouncedSearch`) prima di interrogare Supabase, e filtro client-side immediato anche sul tab `winback`.
+- Invoca `useReminders({ enablePolling: false })` per leggere `winbackDays` senza istanziare un secondo timer di polling.
 - Supporta l'ordinamento Alfabetico (A-Z) o Recenti (`sortOrder`).
 - Supporta i tab per filtrare (Tutti, Compleanni del mese, Winback).
 
@@ -566,13 +588,20 @@ Drawer laterale (slide-in da destra). Usa `useNotifications()` per tutte le azio
 
 ### `SettingsModal` (`src/components/SettingsModal.tsx`)
 
-Modale unificato per le impostazioni utente. Accessibile dalla sidebar. Include quattro aree principali:
-- **Sicurezza (2FA & PIN Report)**: Gestisce l'abilitazione (enrollment) e disabilitazione dell'autenticazione a due fattori TOTP (AAL2), e la configurazione, modifica o rimozione del **PIN di Sicurezza a 6 cifre per il fatturato Report** (protetta da password admin). Include banner per recupero 2FA.
-- **Notifiche**: Configurazione di `useReminders` (suoni, anticipo, backup reminder).
+Modale unificato per le impostazioni utente. Accessibile dalla sidebar o tramite l'evento globale `'open-settings-modal'` (`triggerOpenSettings()`). Include quattro aree principali:
+- **Sicurezza (2FA & PIN Report)**: Gestisce l'abilitazione (enrollment con QR code renderizzato in modo sicuro tramite `<img src="data:image/svg+xml..." />`) e la disabilitazione dell'autenticazione a due fattori TOTP (AAL2, verificando la password tramite `checkAdminPassword` senza degradare la sessione AAL2), oltre alla configurazione, modifica o rimozione del **PIN di Sicurezza a 6 cifre per il fatturato Report** (protetta da password admin). Include banner per recupero 2FA.
+- **Notifiche**: Configurazione di `useReminders` (suoni, anticipo, backup reminder, `winbackDays`).
 - **Password**: Cambio password.
 - **QR Code & Link Pubblico**: Generazione e stampa del QR Code per la registrazione pubblica dei clienti (`/qr/:salonId`). Link diretto copiabile e visualizzazione QR inline. Spostato qui dalla rimossa pagina Marketing.
 
-**Props**: `isOpen`, `onClose`.
+**Props**: `isOpen`, `onClose`, `initialTab` (opzionale: `'notifications' | 'password' | 'qr' | 'security'`).
+
+---
+
+### `ReportPinModal` (`src/components/ReportPinModal.tsx`) e `ReportPinSetupModal` (`src/components/ReportPinSetupModal.tsx`)
+
+- **`ReportPinModal`**: modale per l'inserimento del PIN a 6 cifre con rate-limiting anti-brute-force (blocco di 30 secondi dopo 5 tentativi falliti consecutivi persistito in `sessionStorage` sotto `root_report_pin_lockout`) e link rapido per modificare/recuperare il PIN in `SettingsModal`.
+- **`ReportPinSetupModal`**: wizard di prima configurazione del PIN a 6 cifre con opzione "Salta per ora" (`skip_report_pin`).
 
 ---
 
@@ -625,7 +654,8 @@ Modale per l'invio di feedback da parte degli utenti della Beta. Accessibile dal
 - **View default**: `Views.DAY`
 
 **Feature**:
-- **Colonne staff**: se ci sono staff attivi → una colonna per staff + colonna "Non assegnato". Se nessuno staff → vista standard.
+- **Colonne staff**: se ci sono staff attivi → una colonna per staff + colonna "Non assegnato". Se nessuno staff → vista standard. Gli appuntamenti associati a collaboratori disattivati o rimossi vengono automaticamente riallocati nella colonna `'unassigned'` tramite `displayedEvents` (`useMemo`), così da non risultare mai invisibili.
+- **Resilienza rete & Refresh su Focus/Online/Visibilità**: normalizza `start_time` (`HH:mm:ss` → `HH:mm`), protegge `fetchEvents` da race condition con `latestRequestRef`, preserva gli appuntamenti già visibili a schermo in caso di errore di rete effettuando fino a 2 retry automatici silenziosi (2s / 4s), e coordina un singolo listener debounced (250ms) su `focus`, `online` e `visibilitychange` che aggiorna sia `fetchEvents()` sia `refreshStaff()`.
 - **Drag & Drop**: spostamento appuntamenti aggiorna `date`, `start_time`, `staff_id`.
 - **Click slot**: apre `AgendaModal` (creazione) con data/ora/staff pre-compilati.
 - **Click evento**: context menu con opzioni modifica/elimina.
@@ -648,18 +678,18 @@ Modale per l'invio di feedback da parte degli utenti della Beta. Accessibile dal
 
 - **Rotta**: `/inventory`
 - **Hook**: `useProducts`
-- **Feature**: lista con ricerca (nome + brand), modal `ProductModal` (componente locale) per add/edit, `ConfirmModal` per delete, alert visivo per `stock <= min_stock`. Input numerici gestiti come `string | number` per evitare "0" automatico al focus.
+- **Feature**: lista con ricerca (nome + brand + barcode), modal `ProductModal` (definito a livello modulo per preservare il focus degli input durante i re-render) per add/edit, `ConfirmModal` sia per eliminazione prodotto sia per conferma aggiornamento quantità su codice a barre duplicato, alert visivo per `stock <= min_stock`. Input numerici gestiti come `string | number` per evitare "0" automatico al focus.
 
 ---
 
 ### `Reports` (`src/pages/Reports.tsx`)
 
 - **Rotta**: `/reports`
-- **Hook**: `useStats`, `useAuth`
+- **Hook**: `useStats`, `useAuth`, `useReportSecurity`
 - **Libreria grafici**: `recharts` (LineChart trend giornaliero, BarChart confronti)
-- **Feature**: filtro DateRange (Oggi/Settimana/Mese/Anno/custom), KPI cards con `growth` %, top trattamenti/clienti/staff, clienti dormienti, export CSV via `exportToCsv()` (solo dati utente corrente, RLS garantisce isolamento).
-- **Protezione Fatturato (PIN 6 Cifre)**: i dati economici (incassi, scontrino medio, ricavi prodotti, trend grafici e colonne Registro Dettagliato) sono sfocati all'avvio per privacy in salone. L'icona occhio permette di sbloccarli tramite PIN di sicurezza a 6 cifre. Include wizard di prima configurazione (con opzione 'Salta per ora'), link per recupero/cambio PIN protetto da password admin in Impostazioni, e protezione preventiva sulle esportazioni Excel/CSV.
-- **Registro Dettagliato**: pulsante "Registro Dettagliato →" → imposta `showDetailView = true` → render immediato di `<ClientDetailView range={selectedRange} onClose={...} />` (sostituisce il render standard della pagina). Chiusura tramite `onClose` ripristina la vista Reports. Condivide lo stato di sblocco PIN con la schermata Reports.
+- **Feature**: filtro DateRange (Oggi/Settimana/Mese/Mese Scorso/Anno/Personalizzato), KPI cards con `growth` %, top trattamenti/clienti/staff, clienti dormienti, export CSV/Excel e Backup completo JSON/Excel paginati tramite `.range()` (a blocchi di 1000 record) e protetti da `ensureAuthenticatedSession()`.
+- **Protezione Fatturato (PIN 6 Cifre)**: i dati economici (incassi, scontrino medio, ricavi prodotti, trend grafici e colonne Registro Dettagliato) sono sfocati all'avvio per privacy in salone. L'icona occhio ("Mostra"/"Nascondi") permette di sbloccarli tramite PIN di sicurezza a 6 cifre. `<ReportPinModal />` e `<ReportPinSetupModal />` sono renderizzati a livello radice di `Reports.tsx` anche quando `showDetailView` è attivo, così che lo sblocco del fatturato e l'export CSV funzionino identicamente sia nella vista principale sia dentro `ClientDetailView`.
+- **Registro Dettagliato**: pulsante "Registro Dettagliato →" → imposta `showDetailView = true` → render di `<ClientDetailView />` condividendo `selectedRange`, `customDates`, `showCustomPicker` e lo stato di sblocco PIN con `Reports`.
 
 ---
 
@@ -717,11 +747,12 @@ A causa di frequenti rate limit / blocchi SMTP di Supabase e filtri Spam:
 
 - **Routing**: Si può utilizzare sia `BrowserRouter` per build web standard che HashRouter. Attualmente configurato come PWA-friendly.
 - **Styling**: Tailwind CSS v4, solo classi utility. Helper `cn()` in `src/lib/utils.ts`. Evitare file `.css` salvo `src/index.css` e `src/App.css`.
-- **Date & Prevenzione "Date Drift"**: `date-fns` con locale `it` per tutti i `format()` e `parse()`. Mai `moment.js`. **Anti-Date Drift**: EVITARE ASSOLUTAMENTE costrutti come `new Date('2026-04-24T10:00')` per il parsing (causa glitch UTC vs Local time). Usa sempre: `parse('2026-04-24 10:00', 'yyyy-MM-dd HH:mm', new Date())`.
+- **Date & Prevenzione "Date Drift"**: `date-fns` con locale `it` per tutti i `format()` e `parse()`. Mai `moment.js`. **Anti-Date Drift**: EVITARE ASSOLUTAMENTE costrutti come `new Date('2026-04-24T10:00')` per il parsing (causa glitch UTC vs Local time). Usa sempre: `parse('2026-04-24 10:00', 'yyyy-MM-dd HH:mm', new Date())`. Per calcolare delta tra date o periodi precedenti usare `differenceInCalendarDays` + `addDays` + `startOfDay`/`endOfDay` (DST-safe).
 - **Form**: `react-hook-form` + `zod` con `zodResolver`. Non usare stato controllato manuale per i form.
 - **Toast**: `react-hot-toast`. Il `<Toaster />` è montato una sola volta in `MainLayout`. Non aggiungere istanze aggiuntive.
 - **Icone**: `lucide-react` esclusivamente.
-- **RLS**: ogni `insert` Supabase deve includere `user_id: user.id`.
+- **RLS & Session Guard**: ogni `insert` Supabase deve includere `user_id: user.id`; ogni lettura protetta da RLS deve invocare `await ensureAuthenticatedSession()` (`src/lib/supabase.ts`) per impedire il fallback silenzioso al ruolo `anon`.
+- **Sicurezza DOM & Export CSV**: vietato usare `dangerouslySetInnerHTML` o manipolazioni dirette `innerHTML`. L'esportazione CSV (`createCsvString` in `src/lib/utils.ts`) neutralizza automaticamente le formule Excel/CSV (`=`, `+`, `-`, `@`, `\t`, `\r`) contro attacchi CSV Formula Injection e rilascia gli Object URL con `URL.revokeObjectURL`.
 - **TypeScript**: strict mode. Nessun `any` implicito. Types definiti in `src/types/index.ts`.
 - **Dialoghi distruttivi**: sempre `ConfirmModal`, mai `window.confirm()`.
 - **Lingua**: italiano per tutti i testi UI, commenti e messaggi di commit.
@@ -768,35 +799,35 @@ npx supabase functions deploy telegram-webhook
 |------|-------|
 | `src/types/index.ts` | Tipi Supabase — **fonte autoritativa schema DB** |
 | `src/App.tsx` | Routing (BrowserRouter, guard autenticazione) |
-| `src/layout/MainLayout.tsx` | Sidebar, navigazione, campana notifiche, `PASSWORD_RECOVERY` listener |
-| `src/lib/supabase.ts` | Client Supabase (da variabili d'ambiente `VITE_*`) |
-| `src/lib/utils.ts` | `cn()` (classi CSS), `exportToCsv()` (download CSV) |
-| `src/context/AuthContext.tsx` | Auth globale, auto-logout 60m, AAL2 middleware — `useAuth()` |
-| `src/context/NotificationContext.tsx` | Centro notifiche in-app — `useNotifications()` |
+| `src/layout/MainLayout.tsx` | Sidebar, navigazione, campana notifiche, listener `'open-settings-modal'`, fallback logo React state |
+| `src/lib/supabase.ts` | Client Supabase (da variabili d'ambiente `VITE_*`) + helper `ensureAuthenticatedSession()` |
+| `src/lib/utils.ts` | `cn()` (classi CSS), `createCsvString()` (con protezione CSV Formula Injection), `exportToCsv()` |
+| `src/context/AuthContext.tsx` | Auth globale, auto-logout 60m, stabilizzazione `user`, refresh `online`, AAL2 middleware — `useAuth()` |
+| `src/context/NotificationContext.tsx` | Centro notifiche in-app (cap 100 notifiche, cleanup al logout) — `useNotifications()` |
 | `src/context/StaffContext.tsx` | Gestione staff — `useStaff()` |
 | `src/context/TreatmentContext.tsx` | Listino trattamenti — `useTreatments()` |
-| `src/hooks/useAppointments.ts` | CRUD appuntamenti, logica price null/not-null |
-| `src/hooks/useClients.ts` | CRUD clienti, rilevamento duplicati telefono/nome |
+| `src/hooks/useAppointments.ts` | CRUD appuntamenti paginati (`.range()`), logica price null/not-null |
+| `src/hooks/useClients.ts` | CRUD clienti paginati, sanitizzazione filtri PostgREST `.or()`, rilevamento duplicati |
 | `src/hooks/useProducts.ts` | CRUD prodotti, `decrementStock` via RPC |
-| `src/hooks/useStats.ts` | KPI aggregati, confronto periodi, tipi statistiche |
+| `src/hooks/useStats.ts` | KPI aggregati DST-safe, confronto periodi, tipi statistiche |
 | `src/hooks/useDetailedReport.ts` | Report dettagliato per cliente, `DetailedClientRow`, `DetailedReportData` |
-| `src/hooks/useReminders.ts` | Reminder appuntamenti + backup Smart Snooze 14gg |
-| `src/hooks/useWinback.ts` | Candidati winback — clienti con ultima visita > N giorni (default 60) |
-| `src/hooks/useReportSecurity.ts` | Gestione hash SHA-256 PIN a 6 cifre, skip flag e verifica password admin |
-| `src/pages/Agenda.tsx` | Calendario DnD con colonne staff, context menu, DnD |
+| `src/hooks/useReminders.ts` | Reminder appuntamenti + backup Smart Snooze 14gg + opzione `{ enablePolling }` |
+| `src/hooks/useWinback.ts` | Candidati winback paginati e chunked — clienti con ultima visita > N giorni (default 60) |
+| `src/hooks/useReportSecurity.ts` | Gestione hash SHA-256 PIN a 6 cifre, skip flag e `checkAdminPassword` stateless |
+| `src/pages/Agenda.tsx` | Calendario DnD con colonne staff, fallback `'unassigned'`, retry automatico e refresh debounced |
 | `src/pages/Clients.tsx` | Sidebar clienti + form checkout |
-| `src/pages/Inventory.tsx` | Gestione magazzino prodotti |
-| `src/pages/Reports.tsx` | KPI, grafici recharts, export CSV, protezione PIN e sfocatura |
+| `src/pages/Inventory.tsx` | Gestione magazzino prodotti con `ProductModal` top-level e `ConfirmModal` |
+| `src/pages/Reports.tsx` | KPI, grafici recharts, export/backup paginati, protezione PIN condivisa con `ClientDetailView` |
 | `src/components/AgendaModal.tsx` | Modale multi-step prenotazione (client→details→new-client) |
 | `src/components/AppointmentForm.tsx` | Form checkout + storico cliente raggruppato per data |
-| `src/components/ClientDetailView.tsx` | Vista full-screen registro dettagliato clienti, espandibile per appuntamento |
+| `src/components/ClientDetailView.tsx` | Vista full-screen registro dettagliato clienti sincronizzata con `Reports` |
 | `src/components/ConfirmModal.tsx` | Modale conferma operazioni distruttive (`isDanger` → rosso) |
-| `src/components/ClientList.tsx` | Sidebar lista clienti con ricerca e filtro compleanni ottimizzato |
+| `src/components/ClientList.tsx` | Sidebar lista clienti con ricerca debounced (250ms), filtro compleanni e winback |
 | `src/components/BarcodeScanner.tsx` | Scansione tramite fotocamera (libreria `html5-qrcode`) |
 | `src/components/StaffManagerModal.tsx` | CRUD staff (max 7) |
 | `src/components/TreatmentManagerModal.tsx` | CRUD listino trattamenti |
 | `src/components/SettingsModal.tsx` | Modale unificato impostazioni (2FA, PIN Report, Notifiche, Password, QR Code) |
-| `src/components/ReportPinModal.tsx` | Modale inserimento PIN a 6 cifre con link cambio/recupero PIN |
+| `src/components/ReportPinModal.tsx` | Modale inserimento PIN a 6 cifre con lockout anti-brute-force (5 tentativi / 30s) |
 | `src/components/ReportPinSetupModal.tsx` | Modale prima configurazione PIN con opzione Salta per ora |
 | `src/components/FeedbackModal.tsx` | Modale invio feedback categorizzato (bug/idea/altro) → notifica Telegram |
 | `src/components/NotificationDrawer.tsx` | Drawer centro notifiche |
